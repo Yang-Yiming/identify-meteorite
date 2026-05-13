@@ -1,40 +1,128 @@
 # Design
 
-当前设计目标：把原先依赖 DINO/transformers 的 backbone 全面替换为 timm ConvNeXt V1 Tiny，并保持训练-校准-推理链路闭环。
+当前 `train/` 目录的设计目标已经不只是“把 DINO 替换成 ConvNeXt”，而是维持一条可复现实验、可校准、可 bagging、可自训练的二分类流水线，核心优化目标仍然是离线验证 F1 与线上提交的一致性。
+
+## Design Targets
+
+- 保持主干简单：单 backbone + 轻量分类头 + 标准交叉熵变体。
+- 把分布偏移问题显式建模，而不是只靠阈值拍脑袋。
+- 让训练、推理、bagging、伪标签尽量复用同一份概率语义：`prob_pos_corrected`。
+- 保证每次实验都能从输出目录单独恢复主要配置，不依赖口头记忆。
 
 ## Backbone Strategy
 
-- 统一 backbone: convnext_tiny（timm）。
-- 默认使用 timm 预训练权重；也允许通过 backbone-checkpoint 注入本地权重。
-- 不再依赖 ModelScope、transformers、AutoModel。
+- 默认 backbone 是 `convnext_tiny`，来源于 `timm`。
+- 实现层面保留 `--backbone` 扩展口，允许换成别的兼容 timm 模型，但当前文档、默认值和实验习惯都以 `convnext_tiny` 为中心。
+- 支持三种权重起点：
+  - timm 预训练权重
+  - 指定 `--backbone-checkpoint`
+  - `--no-pretrained` 从头开始
+- 设计上已经彻底去掉对 `transformers` / `AutoModel` / ModelScope 的依赖。
 
-## Finetuning Strategy
+## Optimization Strategy
 
-- 两阶段训练：
-  - head-only：冻结整个 backbone，仅训练分类头，快速对齐任务分布。
-  - finetune：解冻最后 N 个 block（默认 2），做轻量深度适配。
-- 优化器采用 AdamW，分类头和 backbone 使用独立学习率。
+- 训练调度是“可选 warmup + 全量 finetune”，而不是旧版的“只解冻最后几个 block”：
+  - `head_only_epochs > 0` 时，先冻结整个 backbone，只训练分类头。
+  - 进入 finetune 阶段后，直接解冻整个 backbone。
+- 优化器统一用 `AdamW`。
+- 分类头与 backbone 使用独立学习率：
+  - `--head-lr`
+  - `--backbone-lr`
+- backbone 的学习率不是单一值，而是通过 LLRD 逐层衰减：
+  - 越靠近输入层，学习率越小。
+  - `--llrd-decay` 控制相邻层组的缩放比。
+- CUDA 上默认启用 AMP，以减少显存压力并保持训练吞吐。
 
-## Data And Calibration Strategy
+## Data Strategy
 
-- 训练前支持 skip 列表过滤，先清洗再 split，避免先验统计被异常样本污染。
-- 验证集拆成 threshold-search / model-selection 双子集：
-  - threshold-search 用于找最佳阈值。
-  - model-selection 用于 checkpoint 选择，减少阈值搜索过拟合。
-- 验证子集按目标负正比重采样（默认约 4.06:1），并结合 Bayes prior correction 缓解训练集和评测分布偏移。
-- 验证数据目录不再依赖单一固定位置；默认从 `--val-root` 派生，但可单独覆盖 images/labels 路径，便于快速切换新的 validation set。
+- 训练主视图是 mask 图，而不是原图。
+  - 这意味着主模型更接近“区域裁切后的分类器”，不是端到端检测器。
+- 训练前支持 skip list 清洗，且清洗发生在 split 之前，避免污染先验统计。
+- 支持两种验证来源：
+  - 外部验证集：默认 `../data/myval + ../mask/myval`
+  - 训练集内部分层切分：通过 `--val-split-ratio`
+- 支持 `--train-sample-ratio` 做快速小样本实验，不需要手动改 CSV。
+- 伪标签直接并入同一个 DataLoader，不额外维护第二条训练支路。
+  - 置信度阈值由 `--pseudo-prop` 控制。
+  - 样本影响力由 `--pseudo-weight` 控制。
 
-## Augmentation And Inference Strategy
+## Calibration And Model Selection Strategy
 
-- 训练增强：flip + rotate + CutMix + soft-target CE。
-- 推理支持 deterministic 几何 TTA（4way/8way）。
-- 推理流程固定为：概率输出 -> 可选 Bayes 修正 -> 阈值化 -> CSV 导出。
-- bagging 场景下，直接对多次推理导出的 `prob_pos_corrected` 做均值，再统一用固定阈值生成最终提交。
-- 伪标签属于标准 self-training 变体：对未标注样本先生成概率，再按高置信度阈值筛选后并入训练集。
+- 设计重点之一是把“训练分布”和“目标评测分布”拆开处理。
+- `target_neg_pos_ratio` 同时影响两件事：
+  - 验证子集的重采样比例
+  - class weight / Bayes correction 的目标先验
+- 验证集被拆成两个职责不同的子集：
+  - `threshold-search`
+    - 专门负责找阈值。
+  - `model-selection`
+    - 专门负责选 checkpoint。
+- 这种拆分的目的，是降低“同一批样本既调阈值又挑模型”带来的过拟合。
+- `prob_pos_corrected` 是设计上的统一概率语义：
+  - 先拿模型输出的 `prob_pos`
+  - 再按 train prior 和 target prior 做 Bayes prior correction
+- 默认情况下，threshold-search 还是关闭的：
+  - 不传 `--open-threshold-search` 时，固定阈值为 `0.5`
+  - 打开后，才会在 `threshold-search` 子集上搜索最佳 F1 阈值
+- checkpoint 选择最终看的是 `model-selection` 子集上的校正后 F1，而不是训练 loss，也不是 threshold-search 本身的最优分数。
+
+## Augmentation Strategy
+
+- 当前增强刻意保持保守，重点在稳定而不是花哨：
+  - resize
+  - horizontal flip
+  - small-angle rotation
+  - CutMix
+- loss 侧使用 soft-target cross entropy 来兼容 CutMix。
+- `sample_weight` 会贯穿整个 loss 计算，因此伪标签可以低权重混入，而不用单独写 loss 分支。
+
+## Inference Strategy
+
+- 推理阶段优先复用训练输出目录中的 metadata，而不是要求用户手工重复输入所有预处理参数。
+- 默认输出两层语义：
+  - submission label
+  - 可选概率明细 CSV
+- 推理图像源可以切换：
+  - 原图
+  - `mask/test`
+  - `flip-mask` 背景图
+- TTA 只使用 deterministic 几何变换，避免引入不可追溯的随机性。
+- 概率后处理顺序固定为：
+  - forward probability
+  - optional Bayes correction
+  - thresholding
+  - CSV export
+
+## Ensemble And Self-Training Strategy
+
+- bagging 不聚合 hard label，只聚合 `prob_pos_corrected`。
+- 这样做的原因是：
+  - 阈值逻辑只保留一份
+  - 后续还能继续把平均概率拿去做伪标签
+- `run_kfold_bagging.py` 的角色是编排器，不重写训练逻辑。
+  - fold 训练仍调用 `train_finetune.py`
+  - fold 推理仍调用 `infer_submission.py`
+  - 最终聚合仍调用 `bagging-helper.py`
+- self-training 也是沿用同样的概率接口：
+  - 先产出概率 CSV
+  - 再筛高置信度样本
+  - 最后把伪标签样本并回训练集
 
 ## Tracking And Reproducibility
 
-- 训练参数与元数据写入 train_args.json + metadata.json。
-- 关键 checkpoint: best.pt / last.pt。
-- best.pt 默认按验证集 val F1 选择；可通过 --early-stop N 启用连续 N 个 epoch 无提升即停止。
-- 可选 W&B 记录 step/epoch 指标，支持快速回溯与对比实验。
+- 每次训练都会同时写出：
+  - `train_args.json`
+  - `metadata.json`
+  - `history.json`
+  - `best.pt`
+  - `last.pt`
+- checkpoint 里会冗余保存阈值、先验、增强和训练阶段信息，避免“只剩 pt 文件时无法复盘”。
+- W&B 是可选项，但输出目录内的 JSON/pt 文件始终是第一追溯源。
+- 早停逻辑以验证 F1 为基准，而不是训练指标。
+
+## Known Tradeoffs
+
+- 当前主线高度依赖 mask 质量；如果 mask 漏掉关键区域，分类器没有额外机制补救。
+- 验证集重采样和 Bayes correction 都依赖目标负正比估计；这个估计错了，校准也会被一起带偏。
+- threshold-search 默认关闭，意味着很多实验实际上是在固定 `0.5` 阈值下完成 model selection。
+- 代码虽然支持换 timm backbone，但文档和经验参数主要围绕 `convnext_tiny`，直接换 backbone 仍应视为新实验而不是无缝替换。
