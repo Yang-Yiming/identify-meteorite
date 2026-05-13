@@ -10,7 +10,8 @@ from wandb_utils import add_wandb_args
 DEFAULT_BACKBONE = "convnext_tiny"
 DEFAULT_DATA_DIR = Path("../data")
 DEFAULT_LABELS_CSV = DEFAULT_DATA_DIR / "train_labels.csv"
-DEFAULT_VAL_ROOT = Path("~/myval")
+DEFAULT_VAL_ROOT = DEFAULT_DATA_DIR / "myval"
+DEFAULT_VAL_MASK_SPLIT = "myval"
 DEFAULT_PSEUDO_IMAGES_DIR = DEFAULT_DATA_DIR / "test_images"
 DEFAULT_OUTPUT_DIR = Path("./outputs/convnextv2_tiny_finetune")
 DEFAULT_TARGET_NEG_POS_RATIO = 4.06
@@ -42,13 +43,19 @@ def parse_args() -> argparse.Namespace:
         "--val-root",
         type=Path,
         default=DEFAULT_VAL_ROOT,
-        help="Root directory for validation assets; used to resolve val-labels-csv when omitted.",
+        help="Root directory for external validation labels. Defaults to ../data/myval.",
     )
     parser.add_argument(
         "--val-labels-csv",
         type=Path,
         default=None,
         help="Validation labels CSV. Defaults to <val-root>/labels.csv.",
+    )
+    parser.add_argument(
+        "--val-mask-split",
+        type=str,
+        default=DEFAULT_VAL_MASK_SPLIT,
+        help="Mask subdirectory under --mask-dir for external validation. Defaults to myval.",
     )
     parser.add_argument(
         "--val-split-ratio",
@@ -80,7 +87,7 @@ def parse_args() -> argparse.Namespace:
         "--mask-dir",
         type=Path,
         default=Path("../mask"),
-        help="Directory containing background-removed training images under mask/train.",
+        help="Directory containing SAM mask images, e.g. train/, myval/, test/.",
     )
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--head-only-epochs", type=int, default=0)

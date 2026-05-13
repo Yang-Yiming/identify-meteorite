@@ -211,6 +211,8 @@ def main() -> None:
                     str(train_csv),
                     "--val-labels-csv",
                     str(val_csv),
+                    "--val-mask-split",
+                    "train",
                     "--output-dir",
                     str(fold_dir),
                 ]

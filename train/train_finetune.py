@@ -208,6 +208,9 @@ def main() -> None:
     val_labels_csv = val_labels_csv.resolve()
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    mask_dir = args.mask_dir.resolve()
+    mask_train_dir = mask_dir / "train"
+    val_mask_dir = mask_dir / args.val_mask_split
 
     df = pd.read_csv(labels_csv)
     required_columns = {"id", "label"}
@@ -261,7 +264,6 @@ def main() -> None:
     else:
         train_df = df.copy().reset_index(drop=True)
     train_df["sample_weight"] = 1.0
-    mask_train_dir = args.mask_dir.resolve() / "train"
     if not mask_train_dir.is_dir():
         raise FileNotFoundError(f"Mask train directory not found: {mask_train_dir}")
     mask_index, masked_ids, skipped_ids = build_mask_image_index(
@@ -320,6 +322,8 @@ def main() -> None:
         raise RuntimeError("Training set must contain both classes. Increase --train-sample-ratio or add pseudo labels.")
 
     if args.val_split_ratio <= 0.0:
+        if not val_mask_dir.is_dir():
+            raise FileNotFoundError(f"Validation mask directory not found: {val_mask_dir}")
         val_df = pd.read_csv(val_labels_csv)
         if not required_columns.issubset(val_df.columns):
             raise ValueError(f"{val_labels_csv} must contain columns: {sorted(required_columns)}")
@@ -329,14 +333,14 @@ def main() -> None:
             raise ValueError(f"Validation labels contain unknown classes: {missing_labels}")
         val_df["label_idx"] = val_df["label_idx"].astype(int)
         val_mask_index, val_masked_ids, val_skipped_ids = build_mask_image_index(
-            mask_train_dir, val_df["id"].astype(str).tolist()
+            val_mask_dir, val_df["id"].astype(str).tolist()
         )
         if not val_masked_ids:
-            raise RuntimeError("No mask images found for validation set. Check mask/train/ directory.")
+            raise RuntimeError(f"No mask images found for validation set. Check {val_mask_dir}.")
         val_df = val_df[val_df["id"].astype(str).isin(set(val_masked_ids))].reset_index(drop=True)
         val_image_index = val_mask_index
         print(
-            f"Mask validation | mask_dir={mask_train_dir} | "
+            f"Mask validation | mask_dir={val_mask_dir} | "
             f"kept={len(val_masked_ids)} | skipped={len(val_skipped_ids)}"
         )
 
@@ -365,7 +369,7 @@ def main() -> None:
 
     missing_val_ids = [image_id for image_id in val_df["id"].astype(str).tolist() if image_id not in val_image_index]
     if missing_val_ids:
-        val_source = str(mask_train_dir) if args.val_split_ratio > 0.0 else str(mask_train_dir)
+        val_source = str(mask_train_dir) if args.val_split_ratio > 0.0 else str(val_mask_dir)
         raise RuntimeError(f"Missing val images under {val_source}; examples: {missing_val_ids[:5]}")
 
     csv_priors = compute_class_priors(df, label_column="label_idx", positive_label=POSITIVE_LABEL)
@@ -504,10 +508,14 @@ def main() -> None:
             "bayes_correction_enabled": not args.disable_bayes_correction,
             "train_sample_ratio": args.train_sample_ratio,
             "validation_source": {
+                "mode": "train_split" if args.val_split_ratio > 0.0 else "external_masked",
                 "val_split_enabled": args.val_split_ratio > 0.0,
                 "val_split_ratio": args.val_split_ratio,
                 "val_root": str(val_root) if args.val_split_ratio <= 0.0 else None,
-                "val_images_dir": str(mask_train_dir),
+                "mask_dir": str(mask_dir),
+                "train_mask_dir": str(mask_train_dir),
+                "val_mask_split": args.val_mask_split if args.val_split_ratio <= 0.0 else "train",
+                "val_images_dir": str(mask_train_dir) if args.val_split_ratio > 0.0 else str(val_mask_dir),
                 "val_labels_csv": str(val_labels_csv) if args.val_split_ratio <= 0.0 else str(labels_csv),
             },
             "data_cleaning": cleaning_metadata,
