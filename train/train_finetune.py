@@ -197,18 +197,8 @@ def main() -> None:
         raise ValueError("--early-stop must be > 0 when provided.")
     if args.pseudo_weight <= 0.0:
         raise ValueError("--pseudo-weight must be > 0.")
-    if args.flip_mask and not args.use_mask:
-        raise ValueError("--flip-mask requires --use-mask to be set.")
-
     labels_csv = args.labels_csv.resolve()
-    train_images_dir = args.train_images_dir.resolve()
     val_root = args.val_root.expanduser().resolve()
-    val_images_dir = args.val_images_dir
-    if val_images_dir is None:
-        val_images_dir = val_root / "images"
-    else:
-        val_images_dir = val_images_dir.expanduser()
-    val_images_dir = val_images_dir.resolve()
 
     val_labels_csv = args.val_labels_csv
     if val_labels_csv is None:
@@ -271,23 +261,20 @@ def main() -> None:
     else:
         train_df = df.copy().reset_index(drop=True)
     train_df["sample_weight"] = 1.0
-    train_image_index = build_image_index(train_images_dir)
-    train_original_image_index = train_image_index
-    if args.use_mask:
-        mask_train_dir = args.mask_dir.resolve() / "train"
-        if not mask_train_dir.is_dir():
-            raise FileNotFoundError(f"Mask train directory not found: {mask_train_dir}")
-        mask_index, masked_ids, skipped_ids = build_mask_image_index(
-            mask_train_dir, train_df["id"].astype(str).tolist()
-        )
-        if not masked_ids:
-            raise RuntimeError("No mask images found for training set. Check mask/train/ directory.")
-        train_df = train_df[train_df["id"].astype(str).isin(set(masked_ids))].reset_index(drop=True)
-        train_image_index = mask_index
-        print(
-            f"Mask training | mask_dir={mask_train_dir} | "
-            f"kept={len(masked_ids)} | skipped={len(skipped_ids)}"
-        )
+    mask_train_dir = args.mask_dir.resolve() / "train"
+    if not mask_train_dir.is_dir():
+        raise FileNotFoundError(f"Mask train directory not found: {mask_train_dir}")
+    mask_index, masked_ids, skipped_ids = build_mask_image_index(
+        mask_train_dir, train_df["id"].astype(str).tolist()
+    )
+    if not masked_ids:
+        raise RuntimeError("No mask images found for training set. Check mask/train/ directory.")
+    train_df = train_df[train_df["id"].astype(str).isin(set(masked_ids))].reset_index(drop=True)
+    train_image_index = mask_index
+    print(
+        f"Mask training | mask_dir={mask_train_dir} | "
+        f"kept={len(masked_ids)} | skipped={len(skipped_ids)}"
+    )
     if args.val_split_ratio > 0.0:
         if not (0.0 < args.val_split_ratio < 1.0):
             raise ValueError("--val-split-ratio must be in (0, 1).")
@@ -341,7 +328,17 @@ def main() -> None:
             missing_labels = sorted(val_df.loc[val_df["label_idx"].isna(), "label"].unique().tolist())
             raise ValueError(f"Validation labels contain unknown classes: {missing_labels}")
         val_df["label_idx"] = val_df["label_idx"].astype(int)
-        val_image_index = build_image_index(val_images_dir)
+        val_mask_index, val_masked_ids, val_skipped_ids = build_mask_image_index(
+            mask_train_dir, val_df["id"].astype(str).tolist()
+        )
+        if not val_masked_ids:
+            raise RuntimeError("No mask images found for validation set. Check mask/train/ directory.")
+        val_df = val_df[val_df["id"].astype(str).isin(set(val_masked_ids))].reset_index(drop=True)
+        val_image_index = val_mask_index
+        print(
+            f"Mask validation | mask_dir={mask_train_dir} | "
+            f"kept={len(val_masked_ids)} | skipped={len(val_skipped_ids)}"
+        )
 
     threshold_search_df, model_select_df = stratified_subsplit(
         val_df,
@@ -364,11 +361,11 @@ def main() -> None:
 
     missing_train_ids = [image_id for image_id in train_df["id"].astype(str).tolist() if image_id not in train_image_index]
     if missing_train_ids:
-        raise RuntimeError(f"Missing train images under {train_images_dir}; examples: {missing_train_ids[:5]}")
+        raise RuntimeError(f"Missing train images after mask/pseudo indexing; examples: {missing_train_ids[:5]}")
 
     missing_val_ids = [image_id for image_id in val_df["id"].astype(str).tolist() if image_id not in val_image_index]
     if missing_val_ids:
-        val_source = str(train_images_dir) if args.val_split_ratio > 0.0 else str(val_images_dir)
+        val_source = str(mask_train_dir) if args.val_split_ratio > 0.0 else str(mask_train_dir)
         raise RuntimeError(f"Missing val images under {val_source}; examples: {missing_val_ids[:5]}")
 
     csv_priors = compute_class_priors(df, label_column="label_idx", positive_label=POSITIVE_LABEL)
@@ -431,24 +428,14 @@ def main() -> None:
         rotate_degrees=args.rotate_degrees,
     )
 
-    flip_mask = args.use_mask and args.flip_mask
-    original_image_index = train_original_image_index if flip_mask else None
     train_dataset = MeteoriteDataset(
         train_df, train_image_index, train_transform,
-        original_image_index=original_image_index,
-        flip_mask=flip_mask,
     )
-    val_flip_mask = flip_mask and args.val_split_ratio > 0.0
-    val_original_image_index = train_original_image_index if val_flip_mask else None
     threshold_search_dataset = MeteoriteDataset(
         threshold_search_df, val_image_index, eval_transform,
-        original_image_index=val_original_image_index,
-        flip_mask=val_flip_mask,
     )
     model_select_dataset = MeteoriteDataset(
         model_select_df, val_image_index, eval_transform,
-        original_image_index=val_original_image_index,
-        flip_mask=val_flip_mask,
     )
 
     train_loader = DataLoader(
@@ -520,7 +507,7 @@ def main() -> None:
                 "val_split_enabled": args.val_split_ratio > 0.0,
                 "val_split_ratio": args.val_split_ratio,
                 "val_root": str(val_root) if args.val_split_ratio <= 0.0 else None,
-                "val_images_dir": str(val_images_dir) if args.val_split_ratio <= 0.0 else str(train_images_dir),
+                "val_images_dir": str(mask_train_dir),
                 "val_labels_csv": str(val_labels_csv) if args.val_split_ratio <= 0.0 else str(labels_csv),
             },
             "data_cleaning": cleaning_metadata,

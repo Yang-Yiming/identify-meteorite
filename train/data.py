@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
-import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
@@ -256,14 +255,10 @@ class MeteoriteDataset(Dataset):
         dataframe: pd.DataFrame,
         image_index: Dict[str, Path],
         transform: transforms.Compose,
-        original_image_index: Optional[Dict[str, Path]] = None,
-        flip_mask: bool = False,
     ) -> None:
         self.dataframe = dataframe.reset_index(drop=True)
         self.image_index = image_index
         self.transform = transform
-        self.original_image_index = original_image_index
-        self.flip_mask = flip_mask
 
     def __len__(self) -> int:
         return len(self.dataframe)
@@ -275,20 +270,8 @@ class MeteoriteDataset(Dataset):
         if image_path is None:
             raise FileNotFoundError(f"Image not found under train_images: {image_id}")
 
-        if self.flip_mask and self.original_image_index is not None:
-            original_path = self.original_image_index.get(image_id)
-            if original_path is None:
-                raise FileNotFoundError(f"Original image not found: {image_id}")
-            with Image.open(original_path) as original_file, Image.open(image_path) as mask_file:
-                original = np.array(original_file.convert("RGB"))
-                mask = np.array(mask_file.convert("RGB"))
-            meteorite_area = mask.sum(axis=2) > 30
-            flipped = original.copy()
-            flipped[meteorite_area] = 0
-            image = Image.fromarray(flipped)
-        else:
-            with Image.open(image_path) as image_file:
-                image = image_file.convert("RGB")
+        with Image.open(image_path) as image_file:
+            image = image_file.convert("RGB")
 
         pixel_values = self.transform(image)
         label = torch.tensor(int(row["label_idx"]), dtype=torch.long)

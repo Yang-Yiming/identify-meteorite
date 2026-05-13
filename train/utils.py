@@ -10,7 +10,6 @@ from wandb_utils import add_wandb_args
 DEFAULT_BACKBONE = "convnext_tiny"
 DEFAULT_DATA_DIR = Path("../data")
 DEFAULT_LABELS_CSV = DEFAULT_DATA_DIR / "train_labels.csv"
-DEFAULT_TRAIN_IMAGES_DIR = DEFAULT_DATA_DIR / "train_images"
 DEFAULT_VAL_ROOT = Path("~/myval")
 DEFAULT_PSEUDO_IMAGES_DIR = DEFAULT_DATA_DIR / "test_images"
 DEFAULT_OUTPUT_DIR = Path("./outputs/convnextv2_tiny_finetune")
@@ -40,19 +39,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--labels-csv", type=Path, default=DEFAULT_LABELS_CSV)
     parser.add_argument(
-        "--train-images-dir", type=Path, default=DEFAULT_TRAIN_IMAGES_DIR
-    )
-    parser.add_argument(
         "--val-root",
         type=Path,
         default=DEFAULT_VAL_ROOT,
-        help="Root directory for validation assets; used to resolve val-images-dir and val-labels-csv when omitted.",
-    )
-    parser.add_argument(
-        "--val-images-dir",
-        type=Path,
-        default=None,
-        help="Validation image directory. Defaults to <val-root>/images.",
+        help="Root directory for validation assets; used to resolve val-labels-csv when omitted.",
     )
     parser.add_argument(
         "--val-labels-csv",
@@ -87,20 +77,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--skip-image-ids-txt", type=Path, default=None)
     parser.add_argument(
-        "--use-mask",
-        action="store_true",
-        help="Use pre-computed mask images for training",
-    )
-    parser.add_argument(
         "--mask-dir",
         type=Path,
         default=Path("../mask"),
-        help="Directory containing mask images",
-    )
-    parser.add_argument(
-        "--flip-mask",
-        action="store_true",
-        help="Invert mask: keep only background, remove meteorite area",
+        help="Directory containing background-removed training images under mask/train.",
     )
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--head-only-epochs", type=int, default=0)

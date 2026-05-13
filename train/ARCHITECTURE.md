@@ -7,7 +7,7 @@
 - train_finetune.py
   - 训练主入口。
   - 负责数据清洗、分层切分、重采样、训练、阈值搜索、checkpoint 产出。
-  - 验证集路径可通过 `--val-root` 统一切换，也可单独覆盖 `--val-images-dir` / `--val-labels-csv`。
+  - 训练与验证图片固定使用 `--mask-dir` 下的去背景图片；验证标签路径可通过 `--val-root` 或 `--val-labels-csv` 切换。
 - infer_submission.py
   - 推理主入口。
   - 读取 checkpoint + metadata，恢复图像预处理与阈值配置，导出 submission CSV。
@@ -50,7 +50,7 @@
 
 1. 读取标签 CSV，并可选根据 skip-image-ids-txt 过滤异常样本。
 2. 将原始标签映射为 label_idx（二分类）。
-3. train/val 分层切分；val 再切分为 threshold-search 与 model-selection 两个子集。
+3. 从 `mask/train` 读取去背景图片；train/val 分层切分；val 再切分为 threshold-search 与 model-selection 两个子集。
 4. 对两个验证子集按目标负正比重采样（默认约 4.06:1）。
 5. 构建 ConvNeXtClassifier。
 6. Stage 1（head-only）：冻结 backbone，仅训练分类头。

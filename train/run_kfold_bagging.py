@@ -14,7 +14,6 @@ from sklearn.model_selection import StratifiedKFold
 
 DEFAULT_DATA_DIR = Path("../data")
 DEFAULT_LABELS_CSV = DEFAULT_DATA_DIR / "train_labels.csv"
-DEFAULT_TRAIN_IMAGES_DIR = DEFAULT_DATA_DIR / "train_images"
 DEFAULT_TEST_IMAGES_DIR = DEFAULT_DATA_DIR / "test_images"
 DEFAULT_SAMPLE_SUBMISSION = DEFAULT_DATA_DIR / "sample_submission.csv"
 DEFAULT_OUTPUT_ROOT = Path("./outputs/kfold_bagging")
@@ -28,7 +27,6 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--labels-csv", type=Path, default=DEFAULT_LABELS_CSV)
-    parser.add_argument("--train-images-dir", type=Path, default=DEFAULT_TRAIN_IMAGES_DIR)
     parser.add_argument("--test-images-dir", type=Path, default=DEFAULT_TEST_IMAGES_DIR)
     parser.add_argument("--sample-submission", type=Path, default=DEFAULT_SAMPLE_SUBMISSION)
 
@@ -152,7 +150,6 @@ def main() -> None:
         raise ValueError("--n-splits must be >= 2")
 
     labels_csv = args.labels_csv.resolve()
-    train_images_dir = args.train_images_dir.resolve()
     test_images_dir = args.test_images_dir.resolve()
     sample_submission = args.sample_submission.resolve()
 
@@ -212,10 +209,6 @@ def main() -> None:
                     str(train_script),
                     "--labels-csv",
                     str(train_csv),
-                    "--train-images-dir",
-                    str(train_images_dir),
-                    "--val-images-dir",
-                    str(train_images_dir),
                     "--val-labels-csv",
                     str(val_csv),
                     "--output-dir",
