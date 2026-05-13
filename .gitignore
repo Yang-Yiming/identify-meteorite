@@ -1,0 +1,9 @@
+.venv
+__pycache__
+output*
+data
+mask
+preprocess/data-analysis/*.npy
+preprocess/data-analysis/*.png
+preprocess/data-analysis/*.json
+*cache

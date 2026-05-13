@@ -1,0 +1,19 @@
+# Core runtime deps for preprocess scripts
+requests
+pillow
+numpy
+
+# ModelScope + common image/segmentation deps
+modelscope
+opencv-python
+scikit-image
+pyyaml
+addict
+tqdm
+
+# PyTorch (required by ModelScope/SAM)
+torch
+torchvision
+
+# SAM3 official repo (needed to load .pt checkpoints)
+git+https://github.com/facebookresearch/sam3.git
