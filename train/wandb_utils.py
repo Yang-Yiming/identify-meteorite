@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
-DEFAULT_WANDB_PROJECT = "data science practice proj"
+DEFAULT_WANDB_PROJECT = "data science practice proj-stage2"
 
 
 def add_wandb_args(parser: argparse.ArgumentParser, default_job_type: str) -> None:
