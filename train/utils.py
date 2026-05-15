@@ -121,6 +121,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rotate-degrees", type=float, default=15.0)
     parser.add_argument("--cutmix-alpha", type=float, default=0.7)
     parser.add_argument("--cutmix-prob", type=float, default=0.2)
+    parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--log-interval", type=int, default=50)
     parser.add_argument(
         "--early-stop",

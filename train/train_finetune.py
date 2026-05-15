@@ -66,6 +66,7 @@ def run_epoch(
     optimizer: Optional[torch.optim.Optimizer] = None,
     cutmix_alpha: float = 0.0,
     cutmix_prob: float = 0.0,
+    label_smoothing: float = 0.0,
     wandb_run=None,
     stage: Optional[str] = None,
     epoch: Optional[int] = None,
@@ -92,7 +93,7 @@ def run_epoch(
         labels = labels.to(device, non_blocking=True)
         sample_weights = sample_weights.to(device, non_blocking=True)
 
-        soft_targets = build_soft_targets(labels, num_classes=num_classes)
+        soft_targets = build_soft_targets(labels, num_classes=num_classes, smoothing=label_smoothing)
         if is_train:
             mixed_batch = apply_cutmix(
                 pixel_values,
@@ -101,6 +102,7 @@ def run_epoch(
                 num_classes=num_classes,
                 alpha=cutmix_alpha,
                 probability=cutmix_prob,
+                smoothing=label_smoothing,
             )
             pixel_values = mixed_batch.pixel_values
             soft_targets = mixed_batch.mixed_labels
@@ -576,6 +578,7 @@ def main() -> None:
             optimizer=optimizer,
             cutmix_alpha=args.cutmix_alpha,
             cutmix_prob=args.cutmix_prob,
+            label_smoothing=args.label_smoothing,
             wandb_run=wandb_run,
             stage=current_stage,
             epoch=epoch,
