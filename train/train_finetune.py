@@ -372,18 +372,19 @@ def main() -> None:
         first_ratio=args.threshold_search_ratio,
         seed=args.seed + 7,
     )
-    threshold_search_df = rebalance_binary_subset_to_ratio(
-        threshold_search_df,
-        label_column="label_idx",
-        target_neg_pos_ratio=args.target_neg_pos_ratio,
-        seed=args.seed + 17,
-    )
-    model_select_df = rebalance_binary_subset_to_ratio(
-        model_select_df,
-        label_column="label_idx",
-        target_neg_pos_ratio=args.target_neg_pos_ratio,
-        seed=args.seed + 29,
-    )
+    if not args.disable_bayes_correction:
+        threshold_search_df = rebalance_binary_subset_to_ratio(
+            threshold_search_df,
+            label_column="label_idx",
+            target_neg_pos_ratio=args.target_neg_pos_ratio,
+            seed=args.seed + 17,
+        )
+        model_select_df = rebalance_binary_subset_to_ratio(
+            model_select_df,
+            label_column="label_idx",
+            target_neg_pos_ratio=args.target_neg_pos_ratio,
+            seed=args.seed + 29,
+        )
 
     missing_train_ids = [image_id for image_id in train_df["id"].astype(str).tolist() if image_id not in train_image_index]
     if missing_train_ids:
@@ -496,7 +497,10 @@ def main() -> None:
 
     device = torch.device(args.device)
     model = model.to(device)
-    class_weights = build_class_weights_for_target_prior(train_priors, target_priors).to(device)
+    if args.disable_bayes_correction:
+        class_weights = torch.tensor([1.0, 1.0], dtype=torch.float32, device=device)
+    else:
+        class_weights = build_class_weights_for_target_prior(train_priors, target_priors).to(device)
     optimizer = create_optimizer(
         model,
         args.head_lr,
