@@ -11,7 +11,6 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
-from data import build_mask_image_index
 from modeling import ConvNeXtClassifier, build_transforms
 from tta import predict_probabilities_with_tta, resolve_tta_views
 from utils import DEFAULT_BACKBONE, DEFAULT_MEAN, DEFAULT_STD, normalize_image_size, normalize_stats
@@ -22,6 +21,9 @@ DEFAULT_TEST_IMAGES_DIR = DEFAULT_DATA_DIR / "test_images"
 DEFAULT_SAMPLE_SUBMISSION = DEFAULT_DATA_DIR / "sample_submission.csv"
 DEFAULT_OUTPUT_CSV = Path("./output.csv")
 POSITIVE_LABEL = 1
+
+
+MaskSample = Tuple[str, Path]
 
 
 def build_image_index(images_root: Path) -> Dict[str, Path]:
@@ -55,35 +57,51 @@ class TestImageDataset(Dataset):
         image_ids: Sequence[str],
         image_index: Dict[str, Path],
         transform,
+        samples: Optional[Sequence[MaskSample]] = None,
         original_image_index: Optional[Dict[str, Path]] = None,
+        apply_mask: bool = False,
         flip_mask: bool = False,
     ) -> None:
         self.image_ids = list(image_ids)
         self.image_index = image_index
         self.transform = transform
+        self.samples = list(samples) if samples is not None else None
         self.original_image_index = original_image_index
+        self.apply_mask = apply_mask
         self.flip_mask = flip_mask
 
     def __len__(self) -> int:
+        if self.samples is not None:
+            return len(self.samples)
         return len(self.image_ids)
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, str]:
-        image_id = self.image_ids[index]
-        image_path = self.image_index.get(image_id)
-        if image_path is None:
-            raise FileNotFoundError(f"Image not found under test_images: {image_id}")
+        if self.samples is not None:
+            image_id, image_path = self.samples[index]
+        else:
+            image_id = self.image_ids[index]
+            image_path = self.image_index.get(image_id)
+            if image_path is None:
+                raise FileNotFoundError(f"Image not found under test_images: {image_id}")
 
-        if self.flip_mask and self.original_image_index is not None:
+        if (self.apply_mask or self.flip_mask) and self.original_image_index is not None:
             original_path = self.original_image_index.get(image_id)
             if original_path is None:
                 raise FileNotFoundError(f"Original image not found: {image_id}")
             with Image.open(original_path) as original_file, Image.open(image_path) as mask_file:
                 original = np.array(original_file.convert("RGB"))
-                mask = np.array(mask_file.convert("RGB"))
-            meteorite_area = mask.sum(axis=2) > 30
-            flipped = original.copy()
-            flipped[meteorite_area] = 0
-            image = Image.fromarray(flipped)
+                mask_image = mask_file.convert("L")
+                if mask_image.size != original_file.size:
+                    nearest = getattr(Image, "Resampling", Image).NEAREST
+                    mask_image = mask_image.resize(original_file.size, resample=nearest)
+                mask = np.array(mask_image)
+            mask_area = mask > 0
+            masked = original.copy()
+            if self.flip_mask:
+                masked[mask_area] = 0
+            else:
+                masked[~mask_area] = 0
+            image = Image.fromarray(masked)
         else:
             image = Image.open(image_path).convert("RGB")
 
@@ -135,7 +153,20 @@ def parse_args() -> argparse.Namespace:
         default="4way",
         help="TTA view set to use when --tta is enabled.",
     )
-    parser.add_argument("--use-mask", action="store_true", help="Use pre-computed mask images for inference")
+    mask_group = parser.add_mutually_exclusive_group()
+    mask_group.add_argument(
+        "--use-mask",
+        dest="use_mask",
+        action="store_true",
+        default=True,
+        help="Use pre-computed mask images for inference (default)",
+    )
+    mask_group.add_argument(
+        "--no-use-mask",
+        dest="use_mask",
+        action="store_false",
+        help="Disable mask inference and run on original test images",
+    )
     parser.add_argument("--mask-dir", type=Path, default=Path("../mask"), help="Directory containing mask images")
     parser.add_argument("--flip-mask", action="store_true", help="Invert mask: keep only background, remove meteorite area")
     return parser.parse_args()
@@ -162,6 +193,30 @@ def read_submission_ids(sample_submission_path: Path) -> List[str]:
 def collate_test_batch(batch: Iterable[Tuple[torch.Tensor, str]]) -> Tuple[torch.Tensor, List[str]]:
     pixel_values, image_ids = zip(*batch)
     return torch.stack(list(pixel_values), dim=0), list(image_ids)
+
+
+def build_mask_inference_samples(
+    mask_dir: Path,
+    image_ids: Sequence[str],
+) -> Tuple[List[MaskSample], Dict[str, int], List[str], List[str]]:
+    samples: List[MaskSample] = []
+    mask_counts: Dict[str, int] = {}
+    nomask_ids: List[str] = []
+    missing_marker_ids: List[str] = []
+
+    for image_id in image_ids:
+        stem = Path(image_id).stem
+        mask_paths = sorted(mask_dir.glob(f"{stem}_mask_*.png"))
+        mask_counts[image_id] = len(mask_paths)
+        if mask_paths:
+            samples.extend((image_id, mask_path) for mask_path in mask_paths)
+            continue
+
+        nomask_ids.append(image_id)
+        if not (mask_dir / f"{stem}_nomask.done").is_file():
+            missing_marker_ids.append(image_id)
+
+    return samples, mask_counts, nomask_ids, missing_marker_ids
 
 
 def resolve_runtime_settings(
@@ -260,7 +315,7 @@ def main() -> None:
         print(f"Loaded classifier checkpoint | missing_keys={len(missing)} | unexpected_keys={len(unexpected)}")
 
     if args.flip_mask and not args.use_mask:
-        raise ValueError("--flip-mask requires --use-mask to be set.")
+        raise ValueError("--flip-mask requires mask inference. Remove --no-use-mask or --flip-mask.")
 
     test_images_dir = args.test_images_dir.resolve()
     image_index = build_image_index(test_images_dir)
@@ -274,29 +329,38 @@ def main() -> None:
     else:
         image_ids = sorted(image_index.keys())
 
+    missing_original_ids = [image_id for image_id in image_ids if image_id not in test_original_image_index]
+    if missing_original_ids:
+        raise RuntimeError(f"Missing test images for sample submission ids; examples: {missing_original_ids[:5]}")
+
+    mask_samples: Optional[List[MaskSample]] = None
+    mask_counts: Dict[str, int] = {}
+    nomask_ids: List[str] = []
     if args.use_mask:
         mask_test_dir = args.mask_dir.resolve() / "test"
         if not mask_test_dir.is_dir():
             raise FileNotFoundError(f"Mask test directory not found: {mask_test_dir}")
-        mask_index, masked_ids, skipped_ids = build_mask_image_index(mask_test_dir, image_ids)
-        if not masked_ids:
-            raise RuntimeError("No mask images found for test set. Check mask/test/ directory.")
-        image_ids = masked_ids
-        image_index = mask_index
+        mask_samples, mask_counts, nomask_ids, missing_marker_ids = build_mask_inference_samples(mask_test_dir, image_ids)
         print(
             f"Mask inference | mask_dir={mask_test_dir} | "
-            f"kept={len(masked_ids)} | skipped={len(skipped_ids)}"
+            f"masked_images={sum(count > 0 for count in mask_counts.values())} | "
+            f"mask_instances={len(mask_samples)} | nomask_images={len(nomask_ids)}"
         )
-
-    missing_ids = [image_id for image_id in image_ids if image_id not in image_index]
-    if missing_ids:
-        raise RuntimeError(f"Missing test images for sample submission ids; examples: {missing_ids[:5]}")
+        if missing_marker_ids:
+            print(
+                f"Warning: {len(missing_marker_ids)} ids have no mask files and no *_nomask.done marker; "
+                f"examples={missing_marker_ids[:5]}. They will be predicted as 0."
+            )
 
     flip_mask_test = args.use_mask and args.flip_mask
+    apply_mask_test = args.use_mask and not args.flip_mask
     test_original = test_original_image_index if flip_mask_test else None
+    if apply_mask_test:
+        test_original = test_original_image_index
     dataset = TestImageDataset(
         image_ids=image_ids, image_index=image_index, transform=eval_transform,
-        original_image_index=test_original, flip_mask=flip_mask_test,
+        samples=mask_samples,
+        original_image_index=test_original, apply_mask=apply_mask_test, flip_mask=flip_mask_test,
     )
     loader = DataLoader(
         dataset,
@@ -337,16 +401,40 @@ def main() -> None:
             ordered_ids.extend(batch_ids)
             raw_probabilities.append(prob_pos.detach().cpu())
 
-    if ordered_ids != image_ids:
-        raise RuntimeError("Inference order mismatch; aborting to avoid writing a corrupted submission")
+    raw_instance_prob_pos = torch.cat(raw_probabilities) if raw_probabilities else torch.empty(0, dtype=torch.float32)
+    if args.use_mask:
+        if len(ordered_ids) != len(raw_instance_prob_pos):
+            raise RuntimeError("Mask inference output length mismatch; aborting to avoid writing corrupted probabilities")
+        prob_sums = {image_id: 0.0 for image_id in image_ids}
+        prob_counts = {image_id: 0 for image_id in image_ids}
+        for image_id, probability in zip(ordered_ids, raw_instance_prob_pos.tolist()):
+            prob_sums[image_id] += float(probability)
+            prob_counts[image_id] += 1
+        raw_prob_pos = torch.tensor(
+            [
+                prob_sums[image_id] / prob_counts[image_id] if prob_counts[image_id] > 0 else 0.0
+                for image_id in image_ids
+            ],
+            dtype=torch.float32,
+        )
+        ordered_ids = list(image_ids)
+    else:
+        if ordered_ids != image_ids:
+            raise RuntimeError("Inference order mismatch; aborting to avoid writing a corrupted submission")
+        raw_prob_pos = raw_instance_prob_pos
 
-    raw_prob_pos = torch.cat(raw_probabilities) if raw_probabilities else torch.empty(0, dtype=torch.float32)
     corrected_prob_pos = maybe_correct_probabilities(
         raw_prob_pos,
         metadata=metadata,
         disable_bayes_correction=args.disable_bayes_correction,
     )
     labels = (corrected_prob_pos >= settings["threshold"]).to(torch.int64)
+    if args.use_mask and nomask_ids:
+        nomask_id_set = set(nomask_ids)
+        nomask_positions = [idx for idx, image_id in enumerate(ordered_ids) if image_id in nomask_id_set]
+        if nomask_positions:
+            corrected_prob_pos[nomask_positions] = 0.0
+            labels[nomask_positions] = 0
 
     output_csv = args.output_csv.resolve()
     output_csv.parent.mkdir(parents=True, exist_ok=True)
