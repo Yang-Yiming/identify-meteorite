@@ -8,6 +8,7 @@ Pipeline: ConvNeXt Tiny backbone + light classifier head, AdamW, two-stage train
 | Metric | Value |
 |--------|-------|
 | **val_f1** | **0.9708** (baseline: 0.5833, gain: +0.3875) |
+| **test_f1 (Kaggle)** | **0.64516** (previous best: 0.42, gain: +0.225) |
 | Run | `train/outputs/trsearch_bbox02` |
 | Best epoch | 13 |
 | Threshold | 0.5 (no Bayes correction) |
@@ -24,10 +25,10 @@ Pipeline: ConvNeXt Tiny backbone + light classifier head, AdamW, two-stage train
 Plus: BBox-crop preprocessing (margin=0.1, output_size=224) via `preprocess/bbox_crop.py`.
 
 ### Previous Bests
-| Run | val_f1 | Notes |
-|-----|--------|-------|
-| trsearch_bbox01 | 0.9444 | BBox-crop + Bayes correction (threshold=0.227) |
-| trsearch_hlr04 | 0.7664 | Best before bbox-crop (head_lr=1e-4) |
+| Run | val_f1 | test_f1 (Kaggle) | Notes |
+|-----|--------|-------------------|-------|
+| trsearch_bbox01 | 0.9444 | — | BBox-crop + Bayes correction (threshold=0.227) |
+| trsearch_hlr04 | 0.7664 | 0.42 | Best before bbox-crop (head_lr=1e-4) |
 
 ### Kept (cumulative improvements)
 | Step | Change | val_f1 |
