@@ -349,7 +349,7 @@ def main() -> None:
         if missing_marker_ids:
             print(
                 f"Warning: {len(missing_marker_ids)} ids have no mask files and no *_nomask.done marker; "
-                f"examples={missing_marker_ids[:5]}. They will be predicted as 0."
+                f"examples={missing_marker_ids[:5]}. They will be inferred on original images."
             )
 
     flip_mask_test = args.use_mask and args.flip_mask
@@ -410,6 +410,50 @@ def main() -> None:
         for image_id, probability in zip(ordered_ids, raw_instance_prob_pos.tolist()):
             prob_sums[image_id] += float(probability)
             prob_counts[image_id] += 1
+
+        if nomask_ids:
+            nomask_original_index = {
+                img_id: test_original_image_index[img_id]
+                for img_id in nomask_ids
+                if img_id in test_original_image_index
+            }
+            if nomask_original_index:
+                nomask_dataset = TestImageDataset(
+                    image_ids=list(nomask_original_index.keys()),
+                    image_index=nomask_original_index,
+                    transform=eval_transform,
+                    apply_mask=False,
+                    flip_mask=False,
+                )
+                nomask_loader = DataLoader(
+                    nomask_dataset,
+                    batch_size=args.batch_size,
+                    shuffle=False,
+                    num_workers=args.num_workers,
+                    pin_memory=args.device.startswith("cuda"),
+                    collate_fn=collate_test_batch,
+                )
+                with torch.no_grad():
+                    for pixel_values, batch_ids in nomask_loader:
+                        pixel_values = pixel_values.to(device, non_blocking=True)
+                        if args.tta:
+                            prob_pos = predict_probabilities_with_tta(
+                                model,
+                                pixel_values,
+                                positive_label=POSITIVE_LABEL,
+                                views=tta_views,
+                                device_type=device.type,
+                                autocast_enabled=autocast_enabled,
+                            )
+                        else:
+                            with torch.amp.autocast(device_type=device.type, enabled=autocast_enabled):
+                                logits = model(pixel_values)
+                            prob_pos = torch.softmax(logits, dim=1)[:, POSITIVE_LABEL]
+                        for image_id, prob in zip(batch_ids, prob_pos.detach().cpu().tolist()):
+                            prob_sums[image_id] += float(prob)
+                            prob_counts[image_id] += 1
+                print(f"Nomask inference | ran on {len(nomask_original_index)} nomask images using original images")
+
         raw_prob_pos = torch.tensor(
             [
                 prob_sums[image_id] / prob_counts[image_id] if prob_counts[image_id] > 0 else 0.0
@@ -429,12 +473,6 @@ def main() -> None:
         disable_bayes_correction=args.disable_bayes_correction,
     )
     labels = (corrected_prob_pos >= settings["threshold"]).to(torch.int64)
-    if args.use_mask and nomask_ids:
-        nomask_id_set = set(nomask_ids)
-        nomask_positions = [idx for idx, image_id in enumerate(ordered_ids) if image_id in nomask_id_set]
-        if nomask_positions:
-            corrected_prob_pos[nomask_positions] = 0.0
-            labels[nomask_positions] = 0
 
     output_csv = args.output_csv.resolve()
     output_csv.parent.mkdir(parents=True, exist_ok=True)
