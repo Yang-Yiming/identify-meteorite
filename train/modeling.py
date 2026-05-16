@@ -46,8 +46,9 @@ def load_backbone(
     backbone_name: str,
     backbone_checkpoint: Optional[Path] = None,
     pretrained: bool = True,
+    drop_path_rate: float = 0.0,
 ) -> nn.Module:
-    backbone = timm.create_model(backbone_name, pretrained=pretrained and backbone_checkpoint is None, num_classes=0)
+    backbone = timm.create_model(backbone_name, pretrained=pretrained and backbone_checkpoint is None, num_classes=0, drop_path_rate=drop_path_rate)
 
     if backbone_checkpoint is None:
         return backbone
@@ -136,6 +137,7 @@ class ConvNeXtClassifier(nn.Module):
         num_classes: int,
         dropout: float,
         pretrained_backbone: bool = True,
+        drop_path_rate: float = 0.0,
     ) -> None:
         super().__init__()
         self.backbone_name = backbone_name
@@ -143,6 +145,7 @@ class ConvNeXtClassifier(nn.Module):
             backbone_name=backbone_name,
             backbone_checkpoint=backbone_checkpoint,
             pretrained=pretrained_backbone,
+            drop_path_rate=drop_path_rate,
         )
         hidden_size = int(getattr(self.backbone, "num_features"))
         self.classifier = nn.Sequential(

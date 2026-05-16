@@ -97,6 +97,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backbone-lr", type=float, default=1e-5)
     parser.add_argument("--weight-decay", type=float, default=0.05)
     parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--drop-path-rate", type=float, default=0.0)
     parser.add_argument("--train-sample-ratio", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--llrd-decay", type=float, default=0.8)

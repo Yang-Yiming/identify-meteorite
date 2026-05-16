@@ -409,6 +409,7 @@ def main() -> None:
         num_classes=len(unique_labels),
         dropout=args.dropout,
         pretrained_backbone=not args.no_pretrained,
+        drop_path_rate=args.drop_path_rate,
     )
     head_only_epochs = args.head_only_epochs
     finetune_epochs = args.epochs
