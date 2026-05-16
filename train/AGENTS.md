@@ -15,3 +15,10 @@ You should always read and update the docs.
 - ARCHITECTURE.md: current codebase architecture
 - DESIGN.md: core algorithm choice/design to achieve a better score in Kaggle.
 - PLAN.md: future plans
+
+## Submission Convention
+When producing a final submission CSV for Kaggle, copy it to the project root with the naming pattern:
+```
+submission_{run_name}_testf1_{score}.csv
+```
+Example: `submission_bbox02_testf1_0.64516.csv`
