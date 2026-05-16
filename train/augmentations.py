@@ -87,3 +87,42 @@ def apply_cutmix(
     )
     mixed_sample_weights = lambda_value * sample_weights + (1.0 - lambda_value) * sample_weights[indices]
     return CutMixBatch(mixed_pixel_values, labels, soft_targets, mixed_sample_weights, lambda_value, True)
+
+
+@dataclass(frozen=True)
+class MixUpBatch:
+    pixel_values: torch.Tensor
+    labels: torch.Tensor
+    mixed_labels: torch.Tensor
+    sample_weights: torch.Tensor
+    lambda_value: float
+    applied: bool
+
+
+def apply_mixup(
+    pixel_values: torch.Tensor,
+    labels: torch.Tensor,
+    sample_weights: torch.Tensor,
+    num_classes: int,
+    alpha: float,
+    probability: float,
+    smoothing: float = 0.0,
+) -> MixUpBatch:
+    if alpha <= 0.0 or probability <= 0.0 or pixel_values.size(0) < 2:
+        soft_targets = build_soft_targets(labels, num_classes=num_classes, smoothing=smoothing)
+        return MixUpBatch(pixel_values, labels, soft_targets, sample_weights, 1.0, False)
+
+    if torch.rand(1, device=pixel_values.device).item() >= probability:
+        soft_targets = build_soft_targets(labels, num_classes=num_classes, smoothing=smoothing)
+        return MixUpBatch(pixel_values, labels, soft_targets, sample_weights, 1.0, False)
+
+    lam = float(torch.distributions.Beta(alpha, alpha).sample().item())
+    indices = torch.randperm(pixel_values.size(0), device=pixel_values.device)
+
+    mixed_pixel_values = lam * pixel_values + (1.0 - lam) * pixel_values[indices]
+    soft_targets = (
+        lam * build_soft_targets(labels, num_classes=num_classes, smoothing=smoothing)
+        + (1.0 - lam) * build_soft_targets(labels[indices], num_classes=num_classes, smoothing=smoothing)
+    )
+    mixed_sample_weights = lam * sample_weights + (1.0 - lam) * sample_weights[indices]
+    return MixUpBatch(mixed_pixel_values, labels, soft_targets, mixed_sample_weights, lam, True)

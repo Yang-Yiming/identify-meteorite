@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from augmentations import apply_cutmix, build_soft_targets, soft_target_cross_entropy
+from augmentations import apply_cutmix, apply_mixup, build_soft_targets, soft_target_cross_entropy
 from calibration import (
     POSITIVE_LABEL,
     apply_bayes_prior_correction,
@@ -66,6 +66,8 @@ def run_epoch(
     optimizer: Optional[torch.optim.Optimizer] = None,
     cutmix_alpha: float = 0.0,
     cutmix_prob: float = 0.0,
+    mixup_alpha: float = 0.0,
+    mixup_prob: float = 0.0,
     label_smoothing: float = 0.0,
     wandb_run=None,
     stage: Optional[str] = None,
@@ -80,6 +82,7 @@ def run_epoch(
     total_correct = 0
     total_samples = 0
     cutmix_batches = 0
+    mixup_batches = 0
     grad_norm_sum = 0.0
     grad_norm_steps = 0
     collected_labels: List[torch.Tensor] = []
@@ -109,6 +112,22 @@ def run_epoch(
             sample_weights = mixed_batch.sample_weights
             if mixed_batch.applied:
                 cutmix_batches += 1
+
+            mixed_batch2 = apply_mixup(
+                pixel_values,
+                labels,
+                sample_weights,
+                num_classes=num_classes,
+                alpha=mixup_alpha,
+                probability=mixup_prob,
+                smoothing=label_smoothing,
+            )
+            pixel_values = mixed_batch2.pixel_values
+            soft_targets = mixed_batch2.mixed_labels
+            sample_weights = mixed_batch2.sample_weights
+            if mixed_batch2.applied:
+                mixup_batches += 1
+
             optimizer.zero_grad(set_to_none=True)
 
         with torch.set_grad_enabled(is_train):
@@ -157,6 +176,7 @@ def run_epoch(
     }
     if is_train:
         metrics["cutmix_batches"] = float(cutmix_batches)
+        metrics["mixup_batches"] = float(mixup_batches)
         metrics["grad_norm"] = grad_norm_sum / max(1, grad_norm_steps)
         metrics["global_step"] = global_step
     else:
@@ -433,6 +453,13 @@ def main() -> None:
         image_std,
         hflip_prob=args.hflip_prob,
         rotate_degrees=args.rotate_degrees,
+        randaugment_n=args.randaugment_n,
+        randaugment_m=args.randaugment_m,
+        color_jitter_prob=args.color_jitter_prob,
+        color_jitter_brightness=args.color_jitter_brightness,
+        color_jitter_contrast=args.color_jitter_contrast,
+        color_jitter_saturation=args.color_jitter_saturation,
+        color_jitter_hue=args.color_jitter_hue,
     )
 
     train_dataset = MeteoriteDataset(
@@ -527,6 +554,15 @@ def main() -> None:
                 "rotate_degrees": args.rotate_degrees,
                 "cutmix_alpha": args.cutmix_alpha,
                 "cutmix_prob": args.cutmix_prob,
+                "mixup_alpha": args.mixup_alpha,
+                "mixup_prob": args.mixup_prob,
+                "randaugment_n": args.randaugment_n,
+                "randaugment_m": args.randaugment_m,
+                "color_jitter_prob": args.color_jitter_prob,
+                "color_jitter_brightness": args.color_jitter_brightness,
+                "color_jitter_contrast": args.color_jitter_contrast,
+                "color_jitter_saturation": args.color_jitter_saturation,
+                "color_jitter_hue": args.color_jitter_hue,
             },
             "pseudo_labeling": {
                 "enabled": args.pseudo_prob_csv is not None,
@@ -579,6 +615,8 @@ def main() -> None:
             optimizer=optimizer,
             cutmix_alpha=args.cutmix_alpha,
             cutmix_prob=args.cutmix_prob,
+            mixup_alpha=args.mixup_alpha,
+            mixup_prob=args.mixup_prob,
             label_smoothing=args.label_smoothing,
             wandb_run=wandb_run,
             stage=current_stage,
@@ -705,6 +743,15 @@ def main() -> None:
                 "rotate_degrees": args.rotate_degrees,
                 "cutmix_alpha": args.cutmix_alpha,
                 "cutmix_prob": args.cutmix_prob,
+                "mixup_alpha": args.mixup_alpha,
+                "mixup_prob": args.mixup_prob,
+                "randaugment_n": args.randaugment_n,
+                "randaugment_m": args.randaugment_m,
+                "color_jitter_prob": args.color_jitter_prob,
+                "color_jitter_brightness": args.color_jitter_brightness,
+                "color_jitter_contrast": args.color_jitter_contrast,
+                "color_jitter_saturation": args.color_jitter_saturation,
+                "color_jitter_hue": args.color_jitter_hue,
             },
             "training_stages": {
                 "head_only_epochs": head_only_epochs,

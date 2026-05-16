@@ -164,6 +164,13 @@ def build_transforms(
     image_std: List[float],
     hflip_prob: float,
     rotate_degrees: float,
+    randaugment_n: int = 0,
+    randaugment_m: int = 9,
+    color_jitter_prob: float = 0.0,
+    color_jitter_brightness: float = 0.4,
+    color_jitter_contrast: float = 0.4,
+    color_jitter_saturation: float = 0.4,
+    color_jitter_hue: float = 0.1,
 ):
     train_ops = [
         transforms.Resize((image_size, image_size)),
@@ -171,6 +178,20 @@ def build_transforms(
     ]
     if rotate_degrees > 0.0:
         train_ops.append(transforms.RandomRotation(degrees=(-rotate_degrees, rotate_degrees)))
+    if randaugment_n > 0:
+        train_ops.append(transforms.RandAugment(num_ops=randaugment_n, magnitude=randaugment_m))
+    if color_jitter_prob > 0.0:
+        train_ops.append(
+            transforms.RandomApply(
+                [transforms.ColorJitter(
+                    brightness=color_jitter_brightness,
+                    contrast=color_jitter_contrast,
+                    saturation=color_jitter_saturation,
+                    hue=color_jitter_hue,
+                )],
+                p=color_jitter_prob,
+            )
+        )
     train_ops.extend(
         [
             transforms.ToTensor(),

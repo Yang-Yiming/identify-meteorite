@@ -122,6 +122,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rotate-degrees", type=float, default=15.0)
     parser.add_argument("--cutmix-alpha", type=float, default=0.7)
     parser.add_argument("--cutmix-prob", type=float, default=0.2)
+    parser.add_argument("--mixup-alpha", type=float, default=0.0,
+                        help="Mixup alpha parameter (0.0 disables mixup).")
+    parser.add_argument("--mixup-prob", type=float, default=0.5,
+                        help="Per-batch probability of applying mixup.")
+    parser.add_argument("--randaugment-n", type=int, default=0,
+                        help="Number of RandAugment operations (0 disables).")
+    parser.add_argument("--randaugment-m", type=int, default=9,
+                        help="RandAugment magnitude.")
+    parser.add_argument("--color-jitter-prob", type=float, default=0.0,
+                        help="Probability of applying ColorJitter (0.0 disables).")
+    parser.add_argument("--color-jitter-brightness", type=float, default=0.4)
+    parser.add_argument("--color-jitter-contrast", type=float, default=0.4)
+    parser.add_argument("--color-jitter-saturation", type=float, default=0.4)
+    parser.add_argument("--color-jitter-hue", type=float, default=0.1)
     parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--log-interval", type=int, default=50)
     parser.add_argument(
