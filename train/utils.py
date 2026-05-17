@@ -144,6 +144,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Stop after N consecutive epochs without val F1 improvement; disabled when omitted.",
     )
+    parser.add_argument(
+        "--max-grad-norm",
+        type=float,
+        default=0.0,
+        help="Max gradient norm for clipping (0.0 disables). Default: 0.0.",
+    )
     parser.add_argument("--save-every-epoch", action="store_true")
     add_wandb_args(parser, default_job_type="finetune")
     return parser.parse_args()

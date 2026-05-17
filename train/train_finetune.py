@@ -74,6 +74,7 @@ def run_epoch(
     epoch: Optional[int] = None,
     global_step: int = 0,
     log_interval: int = 0,
+    max_grad_norm: float = 0.0,
 ) -> Dict[str, object]:
     is_train = optimizer is not None
     model.train(mode=is_train)
@@ -144,6 +145,8 @@ def run_epoch(
                 assert scaler is not None
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
+                if max_grad_norm > 0.0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
                 batch_grad_norm = compute_grad_norm(model.parameters())
                 grad_norm_sum += batch_grad_norm
                 grad_norm_steps += 1
@@ -627,6 +630,7 @@ def main() -> None:
             epoch=epoch,
             global_step=global_step,
             log_interval=args.log_interval,
+            max_grad_norm=args.max_grad_norm,
         )
         global_step = int(train_metrics.get("global_step", global_step))
         threshold_metrics = run_epoch(
