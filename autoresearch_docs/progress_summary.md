@@ -4,79 +4,62 @@
 Kaggle binary meteorite image classification (mask images via SAM).
 Pipeline: ConvNeXt Tiny backbone + light classifier head, AdamW, two-stage training.
 
-## Best Result
+## Best Result (myval F1 — primary proxy metric)
 | Metric | Value |
 |--------|-------|
-| **val_f1** | **0.9708** (baseline: 0.5833, gain: +0.3875) |
-| **test_f1 (Kaggle)** | **0.64516** (previous best: 0.42, gain: +0.225) |
-| Run | `train/outputs/trsearch_bbox02` |
-| Best epoch | 13 |
-| Threshold | 0.5 (no Bayes correction) |
-| Branch | `autoresearch/different-backbone` |
+| **myval F1@0.5** | **0.7202** (prev best: 0.6379, gain: +0.0823) |
+| **myval F1@best thr** | **0.7331** (prev best: 0.6650, gain: +0.0681) |
+| Run | `train/outputs/myval_v11_hi288_seed42_thr` |
+| Branch | `exp/may17-ema-cosine` |
 
 ### Best Config
 ```
 --backbone convnext_tiny --head-lr 1e-4 --backbone-lr 1e-5
 --dropout 0.1 --label-smoothing 0.1 --cutmix-prob 0.3
---weight-decay 0.05 --seed 123 --disable-bayes-correction
---early-stop 6 --batch-size 96 --head-only-epochs 3 --epochs 25
---val-split-ratio 0.2
+--image-size 288 --batch-size 64
+--max-grad-norm 1.0 --lr-scheduler cosine
+--weight-decay 0.05 --seed 42 --disable-bayes-correction
+--open-threshold-search --early-stop 12 --head-only-epochs 5
+--val-split-ratio 0.0 --val-root data/myval --val-mask-split myval
 ```
-Plus: BBox-crop preprocessing (margin=0.1, output_size=224) via `preprocess/bbox_crop.py`.
+Plus: BBox-crop preprocessing (margin=0.1, output_size=288).
 
-### Previous Bests
-| Run | val_f1 | test_f1 (Kaggle) | Notes |
-|-----|--------|-------------------|-------|
-| trsearch_bbox01 | 0.9444 | — | BBox-crop + Bayes correction (threshold=0.227) |
-| trsearch_hlr04 | 0.7664 | 0.42 | Best before bbox-crop (head_lr=1e-4) |
+## Myval F1 Results (all experiments)
+| Run | Config | myval F1@0.5 | F1@best thr |
+|-----|--------|-------------|-------------|
+| trsearch_bbox02 | baseline (224, split-val, seed=123) | 0.6379 | 0.6650 |
+| myval_v2_mixup | +MixUp (224, myval-val) | 0.6702 | 0.6737 |
+| myval_v5_ema_only | +EMA only (224) | 0.6966 | 0.7072 |
+| myval_v3_trsearch | +thr_search (224, seed=123) | 0.7006 | 0.7114 |
+| myval_v1_gc | +grad_clip (224, myval-val, seed=123) | 0.7027 | 0.7041 |
+| myval_v4_cosine | +cosine (224, seed=123) | 0.7069 | 0.7114 |
+| myval_v6_hi288 | +288px (seed=123) | 0.7107 | 0.7112 |
+| myval_v9_hi288_seed42 | +seed=42 (288px) | 0.7172 | 0.7225 |
+| **myval_v11_hi288_seed42_thr** | **+thr_search (seed=42, 288px)** | **0.7202** | **0.7331** |
 
-### Kept (cumulative improvements)
-| Step | Change | val_f1 |
-|------|--------|--------|
-| Baseline | Imported split02 | 0.5833 |
-| v1 | +threshold_search | 0.5954 |
-| v3 | +cutmix=0.3 | 0.6504 |
-| v5 | +seed=123 | 0.7154 |
-| v7 | +dropout=0.1 | 0.7347 |
-| ls01 | +label_smoothing=0.1 | 0.7368 |
-| hlr04 | +head_lr=1e-4 | 0.7664 |
-| bbox01 | +BBox-crop (Bayes on) | 0.9444 |
-| **bbox02** | **+No Bayes + thresh=0.5** | **0.9708** |
+## Key Findings
+1. **myval-as-validation** (+0.065): The single biggest win.
+2. **Higher resolution (288px)** (+0.008): More pixels help discrimination.
+3. **Seed variance is high**: seed=42 beats seed=123 by +0.0065 at 288px.
+4. **Threshold search**: Works well with seed=42 at 288px (+0.0086 at best thr).
+5. **Cosine LR**: Marginal benefit.
+6. **EMA**: Does NOT help — lagging weights hurt epoch selection.
+7. **MixUp**: Slight standalone benefit but not additive.
 
-### Tested & Discarded
-- Cutmix=0.5, weight decay sweep, higher label smoothing (0.2)
-- Dropout at seed=42 (seed interaction)
-- Higher head_lr (1e-2 training collapse), lower head_lr (3e-5 too low), lower backbone_lr (3e-6)
-- Stochastic depth (0.1, 0.05) — over-regularized
-- Stronger augs (RandAugment+ColorJitter+MixUp) — over-regularized
-- Pseudo-labeling (0.95 conf) — val_f1=0.7317, harms
-- Multi-seed ensemble — doesn't beat best singleton
-- Alternative backbones: convnext_small (0.6275), efficientnet_b0 (0.5263), swin_tiny (0.6667)
-- BBox-crop early attempt (0.5567 without best hyperparams)
+## Tested & Discarded
+- EMA (0.999) — lagging weights, hurts best epoch selection
+- ConvNeXt V2 Tiny at 288px — CUDA OOM (batch_size=64)
+- Threshold search at 288px with seed=123 — no improvement
 
 ## Current State
-- **Best model**: val_f1=0.9708, threshold=0.5, no Bayes correction
-- BBox crop preprocessing at `preprocess/bbox_crop/` (train: 4780 images, test: 176 images)
-- Best checkpoint at `train/outputs/trsearch_bbox02/best.pt`
-- Final submission at `train/outputs/trsearch_bbox02/submission_final.csv` (100 positive / 94 negative, post-processed with not-stone.txt)
-- Bayes correction fully removable via `--disable-bayes-correction`
-- `post_process/zero_not_stone.py` for applying not-stone zero-out
+- **Best model**: myval_f1=0.7202@0.5, best_thr=0.7331@0.4832
+- Checkpoint: `train/outputs/myval_v11_hi288_seed42_thr/best.pt`
+- Branch: `exp/may17-ema-cosine`
+- BBox crop at `preprocess/bbox_crop/` (train: 4780, test: 176, myval: 329)
 
 ## Potential Future Directions
-1. TTA during validation/training
-2. Model soup / weight averaging across epochs
-3. Different SAM checkpoints or mask strategies
-4. BBox-crop margin sweep (try different padding values)
-5. Multi-seed ensemble with current best config
-
-## Key Files
-- `train/train_finetune.py` — main training entrypoint
-- `train/modeling.py` — ConvNeXt classifier
-- `train/data.py` — dataset/splits
-- `train/augmentations.py` — CutMix, MixUp, label smoothing
-- `train/calibration.py` — threshold search, F1, Bayes correction
-- `preprocess/bbox_crop.py` — BBox-crop preprocessing script
-- `my-autoresearch/handoff.md` — detailed handoff
-- `my-autoresearch/experiment_journal.md` — full journal
-- `my-autoresearch/results.tsv` — tabular results
-- `my-autoresearch/plan.md` — strategy & roadmap
+1. Even higher resolution (320px) with batch_size=48
+2. ConvNeXt V2 Tiny at 224px (may have better features)
+3. Ensemble of best 288px checkpoints (seed=42 + seed=123)
+4. Focal loss for hard negative mining
+5. Test-time augmentation during evaluation
