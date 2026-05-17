@@ -76,6 +76,7 @@ def run_epoch(
     global_step: int = 0,
     log_interval: int = 0,
     max_grad_norm: float = 0.0,
+    ema=None,
 ) -> Dict[str, object]:
     is_train = optimizer is not None
     model.train(mode=is_train)
@@ -154,6 +155,8 @@ def run_epoch(
                 scaler.step(optimizer)
                 scaler.update()
                 global_step += 1
+                if ema is not None:
+                    ema.update(model)
                 if wandb_run is not None and log_interval > 0 and global_step % log_interval == 0:
                     wandb_run.log(
                         {
@@ -657,10 +660,9 @@ def main() -> None:
             global_step=global_step,
             log_interval=args.log_interval,
             max_grad_norm=args.max_grad_norm,
+            ema=ema,
         )
         global_step = int(train_metrics.get("global_step", global_step))
-        if ema is not None:
-            ema.update(model)
         if scheduler is not None:
             scheduler.step()
 

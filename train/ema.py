@@ -16,6 +16,8 @@ class ModelEMA:
         with torch.no_grad():
             for name, param in model.named_parameters():
                 if param.requires_grad:
+                    if name not in self.shadow:
+                        self.shadow[name] = param.data.clone().detach()
                     new_average = (1.0 - self.decay) * param.data + self.decay * self.shadow[name]
                     self.shadow[name] = new_average.clone().detach()
 

@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "train"))
 from modeling import ConvNeXtClassifier, build_transforms
 from data import stratified_split, build_image_index, build_mask_image_index
 from utils import DEFAULT_BACKBONE, DEFAULT_MEAN, DEFAULT_STD, normalize_image_size, normalize_stats
+from tta import TTA_MODE_TO_VIEWS, predict_probabilities_with_tta, resolve_tta_views
 
 
 POSITIVE_LABEL = 1
@@ -52,16 +53,23 @@ def load_checkpoint(checkpoint_path: Path, device: torch.device):
     return state_dict, train_args, metadata, backbone_name, dropout, image_size, image_mean, image_std
 
 
-def infer(model, loader, device):
+def infer(model, loader, device, tta_views=None):
     model.eval()
     all_probs = []
     all_ids = []
+    autocast_enabled = device.type == "cuda"
     with torch.no_grad():
         for pixel_values, batch_ids in loader:
             pixel_values = pixel_values.to(device)
-            with torch.amp.autocast(device_type=device.type, enabled=device.type == "cuda"):
-                logits = model(pixel_values)
-            prob_pos = torch.softmax(logits, dim=1)[:, POSITIVE_LABEL].cpu()
+            if tta_views:
+                prob_pos = predict_probabilities_with_tta(
+                    model, pixel_values, POSITIVE_LABEL,
+                    views=tta_views, device_type=device.type, autocast_enabled=autocast_enabled,
+                ).cpu()
+            else:
+                with torch.amp.autocast(device_type=device.type, enabled=autocast_enabled):
+                    logits = model(pixel_values)
+                prob_pos = torch.softmax(logits, dim=1)[:, POSITIVE_LABEL].cpu()
             all_probs.append(prob_pos)
             all_ids.extend(batch_ids)
     return torch.cat(all_probs), all_ids
@@ -80,12 +88,17 @@ def main():
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--val-source", type=str, choices=("train_split", "myval"), default="train_split",
                         help="train_split: 20%% train split; myval: external myval set")
+    parser.add_argument("--tta", type=str, default=None, choices=list(TTA_MODE_TO_VIEWS) + [None],
+                        help="TTA mode: 4way or 8way (default: no TTA)")
     parser.add_argument("--no-plot", action="store_true", help="Skip plotting, only print stats")
     args = parser.parse_args()
 
     device = torch.device(args.device)
     mask_dir = args.mask_dir.resolve()
     test_mask_dir = mask_dir / "test"
+    tta_views = resolve_tta_views(args.tta) if args.tta else None
+    if tta_views:
+        print(f"TTA enabled: mode={args.tta}, views={tta_views}")
 
     print(f"Loading checkpoint: {args.checkpoint}")
     state_dict, train_args, metadata, backbone_name, dropout, image_size, image_mean, image_std = load_checkpoint(args.checkpoint, device)
@@ -142,7 +155,7 @@ def main():
     # --- Infer on val ---
     val_dataset = ImageListDataset(val_ids, val_mask_index, eval_transform)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=device.type == "cuda")
-    val_probs, _ = infer(model, val_loader, device)
+    val_probs, _ = infer(model, val_loader, device, tta_views=tta_views)
     val_probs_np = val_probs.numpy()
 
     # --- Infer on test ---
@@ -154,7 +167,7 @@ def main():
     test_ids = test_masked_ids
     test_dataset = ImageListDataset(test_ids, test_mask_index, eval_transform)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=device.type == "cuda")
-    test_probs, _ = infer(model, test_loader, device)
+    test_probs, _ = infer(model, test_loader, device, tta_views=tta_views)
     test_probs_np = test_probs.numpy()
     print(f"Test inference | ids={len(test_ids)}")
 
