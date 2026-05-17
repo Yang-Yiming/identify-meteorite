@@ -9,4 +9,6 @@ preprocess/data-analysis/*.json
 preprocess/bbox_crop/train/
 preprocess/bbox_crop/test/
 preprocess/bbox_crop/test_clean/
+preprocess/bbox_crop/myval/
 *cache
+my-autoresearch

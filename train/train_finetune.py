@@ -45,6 +45,7 @@ from utils import (
     set_seed,
 )
 from wandb_utils import finish_wandb_run, init_wandb_run, update_wandb_summary
+from ema import ModelEMA
 
 
 def compute_grad_norm(parameters) -> float:
@@ -513,6 +514,18 @@ def main() -> None:
     )
     current_stage = "head_only"
 
+    ema = None
+    if args.ema_decay > 0.0:
+        ema = ModelEMA(model, decay=args.ema_decay)
+        print(f"EMA enabled | decay={args.ema_decay:.4f}")
+
+    scheduler = None
+    if args.lr_scheduler == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=total_epochs, eta_min=args.lr_min
+        )
+        print(f"LR scheduler | type=cosine | T_max={total_epochs} | lr_min={args.lr_min}")
+
     wandb_run, wandb_identity = init_wandb_run(
         args,
         default_job_type="finetune",
@@ -576,6 +589,14 @@ def main() -> None:
                 "confidence_threshold": args.pseudo_prop,
                 "pseudo_weight": args.pseudo_weight,
             },
+            "ema": {
+                "enabled": args.ema_decay > 0.0,
+                "decay": args.ema_decay,
+            },
+            "lr_scheduler": {
+                "type": args.lr_scheduler,
+                "lr_min": args.lr_min,
+            },
             "training_stages": {
                 "head_only_epochs": head_only_epochs,
                 "finetune_epochs": finetune_epochs,
@@ -610,6 +631,11 @@ def main() -> None:
                 args.weight_decay,
                 llrd_decay=args.llrd_decay,
             )
+            if args.lr_scheduler == "cosine":
+                remaining_epochs = total_epochs - head_only_epochs
+                scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                    optimizer, T_max=remaining_epochs, eta_min=args.lr_min
+                )
             current_stage = "finetune"
             print(f"Stage finetune | epoch={epoch:02d} | unfreezing full backbone")
 
@@ -633,6 +659,13 @@ def main() -> None:
             max_grad_norm=args.max_grad_norm,
         )
         global_step = int(train_metrics.get("global_step", global_step))
+        if ema is not None:
+            ema.update(model)
+        if scheduler is not None:
+            scheduler.step()
+
+        if ema is not None:
+            ema.apply_shadow(model)
         threshold_metrics = run_epoch(
             model,
             threshold_search_loader,
@@ -647,6 +680,8 @@ def main() -> None:
             num_classes=len(unique_labels),
             class_weights=class_weights,
         )
+        if ema is not None:
+            ema.restore(model)
 
         threshold_raw_prob_pos = threshold_metrics["prob_pos"]
         threshold_corrected_prob_pos = maybe_apply_bayes_correction(
@@ -730,8 +765,15 @@ def main() -> None:
             f"model_select_f1@thr={model_select_f1_at_search_threshold:.4f}"
         )
 
+        checkpoint_state_dict = model.state_dict()
+        if ema is not None:
+            ema.apply_shadow(model)
+            ema_checkpoint_state_dict = model.state_dict()
+            ema.restore(model)
+        else:
+            ema_checkpoint_state_dict = checkpoint_state_dict
         checkpoint = {
-            "model": model.state_dict(),
+            "model": checkpoint_state_dict,
             "optimizer": optimizer.state_dict(),
             "epoch": epoch,
             "stage": current_stage,
@@ -777,7 +819,9 @@ def main() -> None:
         if is_best_checkpoint:
             best_val_score = val_f1
             epochs_without_improvement = 0
-            torch.save(checkpoint, output_dir / "best.pt")
+            best_checkpoint = dict(checkpoint)
+            best_checkpoint["model"] = ema_checkpoint_state_dict
+            torch.save(best_checkpoint, output_dir / "best.pt")
         else:
             epochs_without_improvement += 1
 

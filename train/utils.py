@@ -150,6 +150,25 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Max gradient norm for clipping (0.0 disables). Default: 0.0.",
     )
+    parser.add_argument(
+        "--ema-decay",
+        type=float,
+        default=0.0,
+        help="EMA decay rate (0.0 disables EMA). Default: 0.0.",
+    )
+    parser.add_argument(
+        "--lr-scheduler",
+        type=str,
+        default="constant",
+        choices=("constant", "cosine"),
+        help="LR scheduler type. Default: constant.",
+    )
+    parser.add_argument(
+        "--lr-min",
+        type=float,
+        default=1e-6,
+        help="Minimum LR for cosine scheduler. Default: 1e-6.",
+    )
     parser.add_argument("--save-every-epoch", action="store_true")
     add_wandb_args(parser, default_job_type="finetune")
     return parser.parse_args()
