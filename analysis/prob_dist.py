@@ -78,12 +78,13 @@ def main():
     parser.add_argument("--seed", type=int, default=123, help="Training seed (split uses seed+3)")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--val-source", type=str, choices=("train_split", "myval"), default="train_split",
+                        help="train_split: 20%% train split; myval: external myval set")
     parser.add_argument("--no-plot", action="store_true", help="Skip plotting, only print stats")
     args = parser.parse_args()
 
     device = torch.device(args.device)
     mask_dir = args.mask_dir.resolve()
-    train_mask_dir = mask_dir / "train"
     test_mask_dir = mask_dir / "test"
 
     print(f"Loading checkpoint: {args.checkpoint}")
@@ -103,26 +104,43 @@ def main():
     print(f"Model loaded | missing_keys={len(missing)} | unexpected_keys={len(unexpected)}")
     model = model.to(device)
 
-    # --- Reconstruct val split ---
-    df = pd.read_csv(args.labels_csv)
-    label_to_idx = {lab: i for i, lab in enumerate(sorted(df["label"].unique()))}
-    df["label_idx"] = df["label"].map(label_to_idx).astype(int)
+    # --- Build val set ---
+    val_source_label = args.val_source
+    if args.val_source == "train_split":
+        train_mask_dir = mask_dir / "train"
+        df = pd.read_csv(args.labels_csv)
+        label_to_idx = {lab: i for i, lab in enumerate(sorted(df["label"].unique()))}
+        df["label_idx"] = df["label"].map(label_to_idx).astype(int)
+        val_mask_index, val_masked_ids, val_skipped_ids = build_mask_image_index(
+            train_mask_dir, df["id"].astype(str).tolist()
+        )
+        df_masked = df[df["id"].astype(str).isin(set(val_masked_ids))].reset_index(drop=True)
+        print(f"Val source=train_split | mask_images={len(val_mask_index)} | matched_labels={len(df_masked)} | skipped={len(val_skipped_ids)}")
+        split_seed = args.seed + 3
+        _, val_df = stratified_split(df_masked, label_column="label_idx", val_ratio=args.val_split_ratio, seed=split_seed)
+        val_ids = val_df["id"].astype(str).tolist()
+        val_labels = val_df["label_idx"].astype(int).tolist()
+        val_source_label = f"train_split (ratio={args.val_split_ratio}, seed={args.seed})"
+    else:
+        myval_labels_csv = Path("data/myval/labels.csv")
+        myval_mask_dir = mask_dir / "myval"
+        df = pd.read_csv(myval_labels_csv)
+        label_to_idx = {lab: i for i, lab in enumerate(sorted(df["label"].unique()))}
+        df["label_idx"] = df["label"].map(label_to_idx).astype(int)
+        val_mask_index, val_masked_ids, val_skipped_ids = build_mask_image_index(
+            myval_mask_dir, df["id"].astype(str).tolist()
+        )
+        df = df[df["id"].astype(str).isin(set(val_masked_ids))].reset_index(drop=True)
+        print(f"Val source=myval | mask_images={len(val_mask_index)} | matched_labels={len(df)} | skipped={len(val_skipped_ids)}")
+        val_ids = df["id"].astype(str).tolist()
+        val_labels = df["label_idx"].astype(int).tolist()
+        val_source_label = f"myval (n={len(df)})"
 
-    train_mask_index, train_masked_ids, train_skipped_ids = build_mask_image_index(
-        train_mask_dir, df["id"].astype(str).tolist()
-    )
-    df_masked = df[df["id"].astype(str).isin(set(train_masked_ids))].reset_index(drop=True)
-    print(f"Train mask images: {len(train_mask_index)} | matched labels: {len(df_masked)} | skipped: {len(train_skipped_ids)}")
-
-    split_seed = args.seed + 3
-    train_df, val_df = stratified_split(df_masked, label_column="label_idx", val_ratio=args.val_split_ratio, seed=split_seed)
-    val_ids = val_df["id"].astype(str).tolist()
-    val_labels = val_df["label_idx"].astype(int).tolist()
     val_labels_tensor = torch.tensor(val_labels)
-    print(f"Val split | train={len(train_df)} | val={len(val_df)} | pos={sum(val_labels)}/{len(val_labels)}")
+    print(f"Val set | n={len(val_ids)} | pos={sum(val_labels)}/{len(val_labels)} | ratio={len(val_labels)-sum(val_labels)}/{sum(val_labels)}")
 
     # --- Infer on val ---
-    val_dataset = ImageListDataset(val_ids, train_mask_index, eval_transform)
+    val_dataset = ImageListDataset(val_ids, val_mask_index, eval_transform)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=device.type == "cuda")
     val_probs, _ = infer(model, val_loader, device)
     val_probs_np = val_probs.numpy()
@@ -181,9 +199,10 @@ def main():
             plt.axvline(0.5, color="gray", linestyle="--", alpha=0.7, label="thresh=0.5")
             plt.xlabel("Positive probability")
             plt.ylabel("Density")
-            plt.title(f"Probability distribution: val vs test\n{args.checkpoint.parent.name}")
+            plt.title(f"Probability distribution: val vs test\n{args.checkpoint.parent.name}  [{args.val_source}]")
             plt.legend()
-            out_path = Path(__file__).resolve().parent / "outputs" / args.checkpoint.parent.name / "prob_dist.png"
+            out_name = f"prob_dist_{args.val_source}.png"
+            out_path = Path(__file__).resolve().parent / "outputs" / args.checkpoint.parent.name / out_name
             out_path.parent.mkdir(parents=True, exist_ok=True)
             plt.savefig(out_path, dpi=150, bbox_inches="tight")
             plt.close()
