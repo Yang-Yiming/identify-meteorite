@@ -40,9 +40,50 @@ Config: 288px, seed=42, cosine LR, grad_clip=1.0, head_only=5, epochs=50
 Checkpoint: train/outputs/myval_v9_hi288_seed42/best.pt
 ```
 
-### Next Steps
-- Wait for myval_v11 (seed=42 + thr_search + 288px)
-- Try ConvNeXt V2 Tiny at 224px (crashed at 288px due to OOM)
-- Try even higher resolution (320px) with reduced batch size
-- Ensemble best 288px seeds (42 + 123)
-- Consider focal loss for hard negatives
+## 2026-05-18: 320px Resolution (myval_v12_hi320_seed42)
+
+- **Hypothesis**: Higher 320px resolution improves myval F1 beyond 288px (0.7202).
+- **Config**: `--image-size 320 --batch-size 48 --seed 42 --lr-scheduler cosine --open-threshold-search --save-every-epoch`. Same best config as 288px run (seed=42, bbox-crop, no-Bayes, head_lr=1e-4, backbone_lr=1e-5, dropout=0.1, label_smoothing=0.1, cutmix=0.3).
+- **Total epochs**: 5 head-only + 50 finetune = 55. Batch size reduced from 96 to 48 for memory.
+- **Primary metric (myval F1@0.5)**: **0.6957** (down from 0.7202)
+- **Best threshold F1**: 0.7099 @ thr=0.6934
+- **Internal model_select_f1**: 0.7186 @ thr=0.5840 (epoch 40)
+- **Runtime**: ~33 minutes.
+- **Verdict**: **DISCARD** — 320px regresses myval F1 by -0.0245. convnext_tiny pretrained at 224px does not benefit from 320px with limited data.
+
+### Updated Best
+```
+myval_v11_hi288_seed42_thr: myval_f1=0.7202@0.5, best_thr=0.7331@0.4832
+Config: 288px, seed=42, cosine LR, thr_search, grad_clip=1.0, epochs=50
+Checkpoint: train/outputs/myval_v11_hi288_seed42_thr/best.pt (epoch 20)
+```
+
+## 2026-05-18: TTA + Model Soup
+
+### TTA on myval (post-hoc)
+- **Hypothesis**: Test-time augmentation during myval evaluation improves F1.
+- **Config**: Same best checkpoint (myval_v11_hi288_seed42_thr/best.pt), evaluated with `--tta 4way` and `--tta 8way`.
+- **4way TTA**: myval F1@0.5 = **0.7168** (down from 0.7202). best_thr_F1 = **0.7362** (up from 0.7331).
+- **8way TTA**: myval F1@0.5 = **0.7059** (worse).
+- **Verdict**: **DISCARD** — TTA at @0.5 threshold not beneficial.
+
+### Model Soup (weight averaging across epochs)
+- **Hypothesis**: Averaging top-N epoch checkpoints improves generalization.
+- **Training**: Reran best 288px config with `--save-every-epoch` → 65 epochs (best_epoch=20, internal val_f1=0.7500).
+- **Top-10 soup**: myval F1@0.5 = **0.7184** (worse than single 0.7202).
+- **Top-5 soup**: myval F1@0.5 = **0.7251**.
+- **Top-3 soup** (epochs 20, 39, 26): myval F1@0.5 = **0.7251** (+0.0049).
+- **Verdict**: **KEEP** — top-3 model soup is new best.
+
+### Updated Best
+```
+myval_v13_hi288_seed42_soup/soup.pt (top-3: epochs 20, 39, 26): myval_f1=0.7251@0.5
+Config: 288px, seed=42, cosine LR, thr_search, bbox-crop, no-Bayes
+Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
+```
+
+### Next Directions
+- TTA during training (use during validation for better epoch selection)
+- Multi-seed ensemble with best config (seeds 42, 123)
+- BBox-crop margin sweep
+- Try soup with different weightings (e.g., weighted by val_f1)
