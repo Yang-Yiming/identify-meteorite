@@ -82,6 +82,20 @@ Config: 288px, seed=42, cosine LR, thr_search, bbox-crop, no-Bayes
 Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
 ```
 
+## 2026-05-18: Kaggle Test Result
+
+- **Test F1**: **0.69856** (top-3 model soup, no TTA, thr=0.5, +post-process zero_not_stone).
+- **Previous test best**: 0.64516 (trsearch_bbox02) → **+0.0534 improvement**.
+- **Myval proxy gap**: myval F1=0.7251 vs test F1=0.69856 (gap=0.0265). Myval remains a reasonable proxy.
+
+### Updated Best
+```
+Run:        myval_v13_hi288_seed42_soup (top-3: epochs 20, 39, 26)
+Myval F1:   0.7251@0.5
+Test F1:    0.69856
+Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
+```
+
 ### Next Directions
 - TTA during training (use during validation for better epoch selection)
 - Multi-seed ensemble with best config (seeds 42, 123)
