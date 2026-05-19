@@ -20,10 +20,12 @@ from calibration import (
 from data import (
     MeteoriteDataset,
     build_image_index,
+    build_mytest_dataframe,
     build_mask_image_index,
     build_pseudo_labeled_dataframe,
     filter_dataframe_by_skip_ids,
     rebalance_binary_subset_to_ratio,
+    stratified_group_split,
     stratified_split,
     stratified_subsplit,
 )
@@ -226,8 +228,16 @@ def main() -> None:
         raise ValueError("--early-stop must be > 0 when provided.")
     if args.pseudo_weight <= 0.0:
         raise ValueError("--pseudo-weight must be > 0.")
+    if args.mytest_val_ratio < 0.0 or args.mytest_val_ratio >= 1.0:
+        if args.mytest_val_ratio != 0.0:
+            raise ValueError("--mytest-val-ratio must be in [0, 1).")
+    if args.mytest_val_ratio > 0.0 and args.mytest_root is None:
+        raise ValueError("--mytest-val-ratio requires --mytest-root.")
+    if args.mytest_val_ratio > 0.0 and args.val_split_ratio > 0.0:
+        raise ValueError("--mytest-val-ratio cannot be combined with --val-split-ratio.")
     labels_csv = args.labels_csv.resolve()
     val_root = args.val_root.expanduser().resolve()
+    mytest_root = args.mytest_root.expanduser().resolve() if args.mytest_root is not None else None
 
     val_labels_csv = args.val_labels_csv
     if val_labels_csv is None:
@@ -306,6 +316,96 @@ def main() -> None:
         f"Mask training | mask_dir={mask_train_dir} | "
         f"kept={len(masked_ids)} | skipped={len(skipped_ids)}"
     )
+
+    mytest_metadata: Dict[str, object] = {
+        "enabled": False,
+        "root": None,
+        "val_ratio": args.mytest_val_ratio,
+        "split_strategy": args.mytest_val_strategy,
+        "total_count": 0,
+        "train_count": 0,
+        "val_count": 0,
+        "label_counts": {},
+        "group_counts": {},
+    }
+    if mytest_root is not None:
+        mytest_df, mytest_stats = build_mytest_dataframe(mytest_root)
+        mytest_df["label_idx"] = mytest_df["label"].map(label_to_idx)
+        if mytest_df["label_idx"].isna().any():
+            missing_labels = sorted(mytest_df.loc[mytest_df["label_idx"].isna(), "label"].unique().tolist())
+            raise ValueError(f"mytest labels contain unknown classes: {missing_labels}")
+        mytest_df["label_idx"] = mytest_df["label_idx"].astype(int)
+        mytest_image_index = build_image_index(mytest_root)
+        missing_mytest_ids = [image_id for image_id in mytest_df["id"].astype(str).tolist() if image_id not in mytest_image_index]
+        if missing_mytest_ids:
+            raise RuntimeError(
+                f"Missing mytest images under {mytest_root}; examples: {missing_mytest_ids[:5]}"
+            )
+        mytest_metadata.update(
+            {
+                "enabled": True,
+                "root": str(mytest_root),
+                "total_count": int(mytest_stats["total_count"]),
+                "label_counts": mytest_stats["label_counts"],
+                "group_counts": mytest_stats["group_counts"],
+            }
+        )
+        if args.mytest_val_ratio > 0.0:
+            if args.mytest_val_strategy == "group":
+                mytest_train_df, mytest_val_df = stratified_group_split(
+                    mytest_df,
+                    label_column="label_idx",
+                    group_column="mytest_group",
+                    val_ratio=args.mytest_val_ratio,
+                    seed=args.seed + 11,
+                )
+            else:
+                mytest_train_df, mytest_val_df = stratified_split(
+                    mytest_df,
+                    label_column="label_idx",
+                    val_ratio=args.mytest_val_ratio,
+                    seed=args.seed + 11,
+                )
+            mytest_train_df = mytest_train_df.reset_index(drop=True)
+            mytest_val_df = mytest_val_df.reset_index(drop=True)
+            mytest_train_df["sample_weight"] = float(args.mytest_sample_weight)
+            train_df = pd.concat([train_df, mytest_train_df[["id", "label", "label_idx", "sample_weight"]]], axis=0, ignore_index=True)
+            train_image_index.update(mytest_image_index)
+            val_df = mytest_val_df[["id", "label", "label_idx"]].copy()
+            val_image_index = mytest_image_index
+            mytest_metadata.update(
+                {
+                    "train_count": int(len(mytest_train_df)),
+                    "val_count": int(len(mytest_val_df)),
+                    "train_split_path": str(output_dir / "mytest_train_split.csv"),
+                    "val_split_path": str(output_dir / "mytest_val_split.csv"),
+                }
+            )
+            mytest_train_df.to_csv(output_dir / "mytest_train_split.csv", index=False)
+            mytest_val_df.to_csv(output_dir / "mytest_val_split.csv", index=False)
+            print(
+                "mytest split | "
+                f"root={mytest_root} | val_ratio={args.mytest_val_ratio:.4f} | "
+                f"train_count={len(mytest_train_df)} | val_count={len(mytest_val_df)} | "
+                f"strategy={args.mytest_val_strategy}"
+            )
+        else:
+            mytest_train_df = mytest_df.copy().reset_index(drop=True)
+            mytest_train_df["sample_weight"] = float(args.mytest_sample_weight)
+            train_df = pd.concat([train_df, mytest_train_df[["id", "label", "label_idx", "sample_weight"]]], axis=0, ignore_index=True)
+            train_image_index.update(mytest_image_index)
+            mytest_metadata.update(
+                {
+                    "train_count": int(len(mytest_train_df)),
+                    "val_count": 0,
+                }
+            )
+            print(
+                "mytest merged | "
+                f"root={mytest_root} | train_count={len(mytest_train_df)} | "
+                f"sample_weight={args.mytest_sample_weight:.4f}"
+            )
+
     if args.val_split_ratio > 0.0:
         if not (0.0 < args.val_split_ratio < 1.0):
             raise ValueError("--val-split-ratio must be in (0, 1).")
@@ -322,7 +422,7 @@ def main() -> None:
             f"Val from train split | val_ratio={args.val_split_ratio:.4f} | "
             f"train_count={len(train_df)} | val_count={len(val_df)}"
         )
-    if args.pseudo_prob_csv is not None:
+    if args.mytest_val_ratio <= 0.0 and args.pseudo_prob_csv is not None:
         pseudo_prob_csv = args.pseudo_prob_csv.resolve()
         pseudo_df = build_pseudo_labeled_dataframe(
             pseudo_prob_csv,
@@ -350,7 +450,7 @@ def main() -> None:
     if train_df["label_idx"].nunique() < 2:
         raise RuntimeError("Training set must contain both classes. Increase --train-sample-ratio or add pseudo labels.")
 
-    if args.val_split_ratio <= 0.0:
+    if args.val_split_ratio <= 0.0 and args.mytest_val_ratio <= 0.0:
         if not val_mask_dir.is_dir():
             raise FileNotFoundError(f"Validation mask directory not found: {val_mask_dir}")
         val_df = pd.read_csv(val_labels_csv)
@@ -561,16 +661,34 @@ def main() -> None:
             "bayes_correction_enabled": not args.disable_bayes_correction,
             "train_sample_ratio": args.train_sample_ratio,
             "validation_source": {
-                "mode": "train_split" if args.val_split_ratio > 0.0 else "external_masked",
+                "mode": (
+                    "mytest_split"
+                    if args.mytest_val_ratio > 0.0
+                    else ("train_split" if args.val_split_ratio > 0.0 else "external_masked")
+                ),
                 "val_split_enabled": args.val_split_ratio > 0.0,
+                "mytest_split_enabled": args.mytest_val_ratio > 0.0,
                 "val_split_ratio": args.val_split_ratio,
-                "val_root": str(val_root) if args.val_split_ratio <= 0.0 else None,
+                "val_root": str(val_root) if (args.val_split_ratio <= 0.0 and args.mytest_val_ratio <= 0.0) else None,
                 "mask_dir": str(mask_dir),
                 "train_mask_dir": str(mask_train_dir),
-                "val_mask_split": args.val_mask_split if args.val_split_ratio <= 0.0 else "train",
-                "val_images_dir": str(mask_train_dir) if args.val_split_ratio > 0.0 else str(val_mask_dir),
-                "val_labels_csv": str(val_labels_csv) if args.val_split_ratio <= 0.0 else str(labels_csv),
+                "val_mask_split": (
+                    args.val_mask_split
+                    if (args.val_split_ratio <= 0.0 and args.mytest_val_ratio <= 0.0)
+                    else "train"
+                ),
+                "val_images_dir": (
+                    str(mask_train_dir)
+                    if args.val_split_ratio > 0.0
+                    else (str(mytest_root) if args.mytest_val_ratio > 0.0 else str(val_mask_dir))
+                ),
+                "val_labels_csv": (
+                    str(val_labels_csv)
+                    if (args.val_split_ratio <= 0.0 and args.mytest_val_ratio <= 0.0)
+                    else (str(output_dir / "mytest_val_split.csv") if args.mytest_val_ratio > 0.0 else str(labels_csv))
+                ),
             },
+            "mytest_source": mytest_metadata,
             "data_cleaning": cleaning_metadata,
             "augmentations": {
                 "hflip_prob": args.hflip_prob,

@@ -63,6 +63,31 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="When > 0, split this fraction of training data as validation (ignores --val-root).",
     )
+    parser.add_argument(
+        "--mytest-root",
+        type=Path,
+        default=None,
+        help="Optional clean external dataset root with meteorite/ and rock/ subdirs, e.g. ../mytest.",
+    )
+    parser.add_argument(
+        "--mytest-val-ratio",
+        type=float,
+        default=0.0,
+        help="When > 0, split this fraction of mytest as validation and merge the rest into training.",
+    )
+    parser.add_argument(
+        "--mytest-val-strategy",
+        type=str,
+        default="group",
+        choices=("group", "sample"),
+        help="Split strategy for mytest validation. group uses filename metadata groups; sample uses plain stratified sampling.",
+    )
+    parser.add_argument(
+        "--mytest-sample-weight",
+        type=float,
+        default=1.0,
+        help="Loss weight assigned to mytest samples when merged into training.",
+    )
     parser.add_argument("--pseudo-prob-csv", type=Path, default=None)
     parser.add_argument(
         "--pseudo-images-dir", type=Path, default=DEFAULT_PSEUDO_IMAGES_DIR

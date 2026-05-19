@@ -11,6 +11,8 @@
 - 默认数据布局如下：
   - `../data/train_labels.csv`
   - `../data/myval/labels.csv`
+  - `../mytest/meteorite/`
+  - `../mytest/rock/`
   - `../data/test_images/`
   - `../mask/train/`
   - `../mask/myval/`
@@ -53,6 +55,8 @@
   - `build_image_index()` 会为唯一 stem 建立跨扩展名别名，减少 `.jpg/.jpeg/.png` 不一致带来的掉样。
   - `filter_dataframe_by_skip_ids()` 在 split 前清洗异常样本。
   - `stratified_split()` / `stratified_subsplit()` 用于 train/val 和 threshold-search/model-selection 两级分层切分。
+  - `build_mytest_dataframe()` 从 `mytest/meteorite` 与 `mytest/rock` 目录直接生成标签表。
+  - `stratified_group_split()` 用文件名 metadata group 做 mytest train/val 切分，默认避免同源样本同时出现在训练和验证中。
   - `rebalance_binary_subset_to_ratio()` 用目标负正比重采样验证子集。
   - `build_pseudo_labeled_dataframe()` 从概率 CSV 生成带 `label_idx` 的伪标签样本。
   - `MeteoriteDataset` 返回 `(pixel_values, label, sample_weight)`，而不是旧版的二元组。
@@ -83,25 +87,31 @@
 2. 将原始 `label` 映射为二分类 `label_idx`，正类固定要求映射到 `1`。
 3. 根据 `--train-sample-ratio` 可选抽样训练集，用于快速实验。
 4. 从 `mask/train` 建立训练图索引，自动丢弃没有对应 mask 的样本。
-5. 构造验证集来源，二选一：
+5. 可选接入 `mytest`：
+   - 若提供 `--mytest-root`，会从 `meteorite/` 和 `rock/` 子目录生成标签。
+   - 若 `--mytest-val-ratio > 0`，则把 `mytest` 切成 `mytest_train` 与 `mytest_val`。
+   - `mytest_train` 并入训练集，`mytest_val` 替代原 validation。
+   - 默认 `--mytest-val-strategy group`，按文件名 metadata group 切分。
+6. 构造验证集来源：
+   - `--mytest-val-ratio > 0`：使用 `mytest_val`，图像直接来自 `mytest` 原图目录。
    - `--val-split-ratio > 0`：直接从训练集分层切出验证集，验证图像仍来自 `mask/train`。
    - 否则：读取 `--val-labels-csv` 或 `<val-root>/labels.csv`，并从 `mask/<val-mask-split>` 读取验证图像。
-6. 若提供 `--pseudo-prob-csv`，则按 `--pseudo-prop` 置信度阈值筛选伪标签，并以 `--pseudo-weight` 加入训练集。
-7. 将验证集再切成 `threshold-search` 与 `model-selection` 两个子集，并分别重采样到 `--target-neg-pos-ratio`。
-8. 构建模型，优先采用 backbone 自带的输入尺寸、mean、std，除非用户显式覆盖。
-9. 训练采用两阶段调度：
+7. 若提供 `--pseudo-prob-csv`，则按 `--pseudo-prop` 置信度阈值筛选伪标签，并以 `--pseudo-weight` 加入训练集。
+8. 将验证集再切成 `threshold-search` 与 `model-selection` 两个子集，并分别重采样到 `--target-neg-pos-ratio`。
+9. 构建模型，优先采用 backbone 自带的输入尺寸、mean、std，除非用户显式覆盖。
+10. 训练采用两阶段调度：
    - `head_only`：冻结整个 backbone，只训练分类头。
    - `finetune`：重新构建优化器并解冻整个 backbone，使用 LLRD。
-10. 每个 epoch 都会计算：
+11. 每个 epoch 都会计算：
     - train loss / accuracy / grad norm / CutMix 触发次数
     - threshold-search 子集指标
     - model-selection 子集指标
-11. 阈值策略：
+12. 阈值策略：
     - 默认不开 `--open-threshold-search`，此时固定使用 `0.5`。
     - 打开后，会在校正后的 `threshold-search` 概率上搜索最佳 F1 阈值，再拿这个阈值评估 `model-selection`。
-12. checkpoint 选择依据是 `model_select_f1_corrected_search_threshold`，也就是校正后、按搜索阈值计算的验证 F1。
-13. 每轮保存 `last.pt`；如果验证 F1 创新高，则覆盖 `best.pt`；传入 `--save-every-epoch` 时还会保留 `epoch_XX.pt`。
-14. 若设置 `--early-stop`，连续若干轮验证 F1 无提升就提前停止。
+13. checkpoint 选择依据是 `model_select_f1_corrected_search_threshold`，也就是校正后、按搜索阈值计算的验证 F1。
+14. 每轮保存 `last.pt`；如果验证 F1 创新高，则覆盖 `best.pt`；传入 `--save-every-epoch` 时还会保留 `epoch_XX.pt`。
+15. 若设置 `--early-stop`，连续若干轮验证 F1 无提升就提前停止。
 
 ## Inference Flow
 
@@ -132,6 +142,8 @@
   - 包含 label 映射、输入尺寸、mean/std、先验统计、class weight、验证来源、增强配置、伪标签配置、训练阶段配置、W&B identity。
 - `history.json`
   - 每个 epoch 的训练/验证指标时间线。
+- `mytest_train_split.csv` / `mytest_val_split.csv`
+  - 仅在 `--mytest-val-ratio > 0` 时生成，记录本次 mytest 切分。
 - `last.pt`
   - 最近一个 epoch 的 checkpoint。
 - `best.pt`

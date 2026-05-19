@@ -153,3 +153,28 @@ Config:     288px, margin=0.10, seed=42, cosine LR, thr_search, bbox-crop, no-Ba
 ### Next Directions
 - Need fundamentally new approach: model architecture change, advanced data augmentation, or more training data.
 - TTA during training (low priority, uncertain).
+
+## 2026-05-20: mytest Split Protocol
+
+- **Hypothesis**: Use high-quality `mytest` as extra clean data: merge `mytest_train` into training, select checkpoints on `mytest_val`, and keep `myval` sealed for KEEP/DISCARD.
+- **Data**: `mytest` has 3955 images (1371 meteorite, 2584 rock). Split with `--mytest-val-ratio 0.15 --mytest-val-strategy group`.
+- **Training**: Best 288px seed=42 config, original train + `mytest_train`, validation on `mytest_val`.
+- **Run**: `train/outputs/mytest_v1_s42`
+- **Best epoch**: 17
+- **mytest_val F1**: 0.8969
+- **Sealed myval F1@0.5**: 0.7321 (slightly above soup 0.7251)
+- **Sealed myval best-thr F1**: 0.7508 @ 0.5771
+- **Kaggle Test F1**: 0.65979 (`post_process/submission_mytest_v1_s42_processed.csv`)
+- **Verdict**: **DISCARD** — clean `mytest` improved training/validation optics and slightly improved sealed myval, but did not generalize to Kaggle test. Roll back to soup as best.
+
+### Updated Best (unchanged)
+```
+Run:        myval_v13_hi288_seed42_soup (top-3: epochs 20, 39, 26)
+Myval F1:   0.7251@0.5
+Test F1:    0.69856
+Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
+Config:     288px, margin=0.10, seed=42, cosine LR, thr_search, bbox-crop, no-Bayes
+```
+
+### Key Learning
+`myval` is still the most useful offline proxy, but small improvements are noise. A move from 0.7251 to 0.7321 on `myval` was not enough; Kaggle test dropped from 0.69856 to 0.65979. Future KEEP decisions should require a **large** sealed-myval gain, not a marginal one, especially when the new training data is clean but source-uniform.

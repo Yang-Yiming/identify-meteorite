@@ -1,3 +1,4 @@
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
@@ -12,6 +13,7 @@ from torchvision import transforms
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 POSITIVE_LABEL = 1
 NEGATIVE_LABEL = 0
+HEX_HASH_RE = re.compile(r"^[0-9a-fA-F]{8,}$")
 
 
 def build_image_index(images_root: Path) -> Dict[str, Path]:
@@ -144,6 +146,55 @@ def stratified_split(
     return train_df, val_df
 
 
+def stratified_group_split(
+    df: pd.DataFrame,
+    label_column: str,
+    group_column: str,
+    val_ratio: float,
+    seed: int,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if not (0.0 < val_ratio < 1.0):
+        raise ValueError("--mytest-val-ratio must be in (0, 1).")
+    if group_column not in df.columns:
+        raise ValueError(f"Missing required group column: {group_column}")
+
+    train_parts = []
+    val_parts = []
+    for _, label_df in df.groupby(label_column):
+        target_val_count = max(1, int(round(len(label_df) * val_ratio)))
+        groups = []
+        for group_value, group_df in label_df.groupby(group_column):
+            groups.append((str(group_value), group_df.sample(frac=1.0, random_state=seed)))
+        if len(groups) < 2:
+            raise RuntimeError(
+                f"Cannot group-split label={label_df[label_column].iloc[0]}: only {len(groups)} group(s)."
+            )
+
+        group_df = pd.DataFrame(
+            {"group": [group for group, _ in groups], "size": [len(group_rows) for _, group_rows in groups]}
+        ).sample(frac=1.0, random_state=seed)
+        selected_groups = set()
+        selected_count = 0
+        for row in group_df.itertuples(index=False):
+            if selected_count >= target_val_count and selected_groups:
+                break
+            selected_groups.add(row.group)
+            selected_count += int(row.size)
+
+        for group_value, group_rows in groups:
+            if group_value in selected_groups:
+                val_parts.append(group_rows)
+            else:
+                train_parts.append(group_rows)
+
+    if not train_parts or not val_parts:
+        raise RuntimeError("Failed to build a non-empty grouped train/val split.")
+
+    train_df = pd.concat(train_parts, axis=0).sample(frac=1.0, random_state=seed).reset_index(drop=True)
+    val_df = pd.concat(val_parts, axis=0).sample(frac=1.0, random_state=seed + 1).reset_index(drop=True)
+    return train_df, val_df
+
+
 def stratified_subsplit(
     df: pd.DataFrame,
     label_column: str,
@@ -168,6 +219,71 @@ def stratified_subsplit(
     first_df = pd.concat(first_parts, axis=0).sample(frac=1.0, random_state=seed).reset_index(drop=True)
     second_df = pd.concat(second_parts, axis=0).sample(frac=1.0, random_state=seed + 1).reset_index(drop=True)
     return first_df, second_df
+
+
+def infer_mytest_group(image_path: Path) -> str:
+    stem = image_path.stem
+    parts = stem.split("_")
+    if len(parts) < 2:
+        return stem
+
+    payload = parts[1:]
+    if payload and HEX_HASH_RE.match(payload[-1]):
+        payload = payload[:-1]
+    if not payload:
+        return stem
+    return payload[0] or stem
+
+
+def build_mytest_dataframe(
+    mytest_root: Path,
+    positive_dir: str = "meteorite",
+    negative_dir: str = "rock",
+) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    if not mytest_root.is_dir():
+        raise FileNotFoundError(f"mytest root not found: {mytest_root}")
+
+    rows = []
+    class_dirs = {
+        positive_dir: POSITIVE_LABEL,
+        negative_dir: NEGATIVE_LABEL,
+    }
+    for class_dir_name, label in class_dirs.items():
+        class_dir = mytest_root / class_dir_name
+        if not class_dir.is_dir():
+            raise FileNotFoundError(f"mytest class directory not found: {class_dir}")
+        for image_path in sorted(class_dir.rglob("*")):
+            if not image_path.is_file() or image_path.suffix.lower() not in IMAGE_SUFFIXES:
+                continue
+            rows.append(
+                {
+                    "id": image_path.name,
+                    "label": label,
+                    "mytest_class": class_dir_name,
+                    "mytest_group": f"{class_dir_name}:{infer_mytest_group(image_path)}",
+                    "source": "mytest",
+                }
+            )
+
+    if not rows:
+        raise RuntimeError(f"No mytest images found under {mytest_root}")
+
+    df = pd.DataFrame(rows)
+    duplicate_ids = sorted(df.loc[df["id"].duplicated(), "id"].unique().tolist())
+    if duplicate_ids:
+        raise RuntimeError(f"Duplicate mytest image filenames are not supported; examples: {duplicate_ids[:5]}")
+
+    label_counts = df["label"].value_counts().sort_index().to_dict()
+    group_counts = df.groupby("label")["mytest_group"].nunique().sort_index().to_dict()
+    metadata: Dict[str, object] = {
+        "root": str(mytest_root),
+        "total_count": len(df),
+        "label_counts": {str(key): int(value) for key, value in label_counts.items()},
+        "group_counts": {str(key): int(value) for key, value in group_counts.items()},
+        "positive_dir": positive_dir,
+        "negative_dir": negative_dir,
+    }
+    return df.reset_index(drop=True), metadata
 
 
 def rebalance_binary_subset_to_ratio(

@@ -41,6 +41,11 @@
 - 支持两种验证来源：
   - 外部验证集：默认 `../data/myval + ../mask/myval`
   - 训练集内部分层切分：通过 `--val-split-ratio`
+- 支持 `mytest` 作为额外高质量外部数据源：
+  - `mytest_train` 并入训练集
+  - `mytest_val` 作为主验证集
+  - `myval` 封存为最终参考集，只在判别阶段使用
+  - 默认按文件名 metadata group 做分层切分，避免同源样本跨 train/val 泄漏
 - 支持 `--train-sample-ratio` 做快速小样本实验，不需要手动改 CSV。
 - 伪标签直接并入同一个 DataLoader，不额外维护第二条训练支路。
   - 置信度阈值由 `--pseudo-prop` 控制。

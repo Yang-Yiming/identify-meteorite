@@ -9,3 +9,4 @@ preprocess/data-analysis/*.json
 preprocess/bbox*
 *cache
 my-autoresearch
+mytest
