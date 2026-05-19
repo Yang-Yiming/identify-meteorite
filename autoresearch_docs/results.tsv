@@ -45,3 +45,8 @@ d820563+dirty	0.7202	epoch=20; myval val; thr_search=on; cosine; image_size=288;
 e3470c9	0.6957	0.7099	33min	discard	myval_v12_hi320_seed42: 320px resolution with best config (seed=42, cosine, bbox-crop, no-Bayes, thr_search). Regressed from 0.7202
 e3470c9	0.7251	val_f1=0.7500@epoch20	38min	keep	myval_v13_hi288_seed42_soup (top-3 model soup): average of epochs 20,39,26. myval_f1=0.7251@0.5 (+0.0049). New best.
 eaa9d36	0.69856	test_f1=0.69856	—	keep	Kaggle test result for soup checkpoint (no TTA, thr=0.5, +post-process). Previous test best was 0.64516 (+0.0534).
+129f383	0.7251	myval_v14_m20: margin=0.2, 288px, seed=42, cosine, thr_search	33min	discard	Margin sweep: looser crop (0.2) regresses myval F1 to 0.6897@0.5 (vs 0.7251 baseline)
+129f383	0.6842	myval_v15_m05: margin=0.05, 288px, seed=42, cosine, thr_search	33min	discard	Margin sweep: tighter crop (0.05) regresses myval F1 to 0.6842@0.5. Loses context.
+129f383	0.6954	myval_v16_m15: margin=0.15, 288px, seed=42, cosine, thr_search	33min	discard	Margin sweep: margin=0.15 gives myval F1=0.6954@0.5, still below 0.10 baseline.
+129f383	0.7251	myval_v13_soup_weighted: top3 weighted, top5 uniform/weighted, top2 uniform/weighted	~1min each	discard	Weighted soup variants (top3_sq, top5, top2) all equal or worse than original top-3 uniform soup. No improvement.
+129f383	0.7283	myval_f1=0.7283 test_f1=0.65968	2×33min train + eval	discard	Multi-seed ensemble: seed42 soup + seed123 → myval F1=0.7283 but test F1=0.65968. Ensemble overfits to myval; seed123 generalizes poorly. Roll back to soup (0.69856 test).

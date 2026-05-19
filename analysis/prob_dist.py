@@ -162,7 +162,7 @@ def main():
     if args.sample_submission.is_file():
         sub_ids = pd.read_csv(args.sample_submission)["id"].astype(str).tolist()
     else:
-        sub_ids = sorted([p.stem for p in test_mask_dir.iterdir() if p.is_file() and p.suffix == ".png"])
+        sub_ids = sorted([p.stem.replace("_mask_000", "") for p in test_mask_dir.iterdir() if p.is_file() and p.suffix == ".png"])
     test_mask_index, test_masked_ids, test_skipped_ids = build_mask_image_index(test_mask_dir, sub_ids)
     test_ids = test_masked_ids
     test_dataset = ImageListDataset(test_ids, test_mask_index, eval_transform)

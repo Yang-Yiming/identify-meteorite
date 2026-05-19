@@ -96,8 +96,60 @@ Test F1:    0.69856
 Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
 ```
 
+## 2026-05-18: Weighted Model Soup Sweep (post-soup)
+
+- **Hypothesis**: Weighting epoch contributions by val_f1 (or squared) improves over uniform top-3 averaging.
+- **Weighted top-3** (linear, squared): myval F1@0.5 = **0.7251** (same as uniform, weights are nearly equal).
+- **Top-2** (uniform, weighted): myval F1@0.5 = **0.7176** (worse).
+- **Top-5** (uniform, weighted): myval F1@0.5 = **0.7151** (worse).
+- **Verdict**: **DISCARD** — top-3 uniform soup remains best. Weighting schemes don't help when top epochs have similar val_f1.
+
+## 2026-05-18: BBox-Crop Margin Sweep
+
+- **Hypothesis**: The default bbox-crop margin (0.10) may not be optimal. Tighter crop (0.05) focuses more on meteorite; looser crop (0.15, 0.20) provides more context.
+- **Training**: Full retrain with best config (288px, seed=42, cosine, myval-as-val) at each margin.
+- **Results**:
+  | Margin | myval F1@0.5 | Δ from best | Verdict |
+  |--------|-------------|-------------|---------|
+  | 0.05 | 0.6842 | -0.0409 | DISCARD — too tight, loses context |
+  | **0.10** | **0.7251** | **—** | **BEST** (current default) |
+  | 0.15 | 0.6954 | -0.0297 | DISCARD — too loose, background noise |
+  | 0.20 | 0.6897 | -0.0354 | DISCARD — too loose, background noise |
+- **Verdict**: **DISCARD** — margin=0.10 is confirmed optimal. Both tighter and looser margins degrade performance.
+
+## 2026-05-19: Multi-Seed Ensemble
+
+- **Hypothesis**: Soft-voting ensemble of seed-42 (best single), seed-123, and seed-256 trained with identical config improves myval F1.
+- **Training**: Retrained seeds 123 and 256 with best config (288px, margin=0.10, cosine LR, myval-as-val, 50 epochs).
+- **Checkpoints**:
+  - `train/outputs/myval_v13_hi288_seed42_soup/soup.pt` (seed 42 soup, best=0.7251)
+  - `train/outputs/myval_v17_s123/best.pt` (seed 123, epoch 43, val_f1=0.6909, myval=0.7086)
+  - `train/outputs/myval_v18_s256/best.pt` (seed 256, epoch 40, val_f1=0.7182, myval=0.7068)
+- **Ensemble results**:
+  | Ensemble | myval F1@0.5 | best thr F1 |
+  |----------|-------------|-------------|
+  | seed42 only (soup) | 0.7251 | 0.7273 |
+  | **seed42 + seed123** | **0.7283** | **0.7283** |
+  | seed42 + seed256 | 0.7151 | 0.7178 |
+   | seed42 + seed123 + seed256 | 0.7175 | 0.7230 |
+- **Kaggle Test F1**: **0.65968** (submission `post_process/submission_ensemble42_123_processed.csv`).
+- **Analysis**: Ensemble dramatically overfits myval. Myval proxy gap widened from ~0.027 (soup) to ~0.069 (ensemble). Seed 123 (myval=0.7086) generalizes poorly despite reasonable myval score. Soft-voting with a weaker seed drags down the test performance.
+- **Verdict**: **DISCARD** — ensemble does not generalize. Roll back to soup as best.
+
+### Updated Best (reverted to soup)
+```
+Run:        myval_v13_hi288_seed42_soup (top-3: epochs 20, 39, 26)
+Myval F1:   0.7251@0.5
+Test F1:    0.69856
+Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
+Config:     288px, margin=0.10, seed=42, cosine LR, thr_search, bbox-crop, no-Bayes
+```
+
+### Key Learnings
+1. **Myval proxy is fragile**: A 0.0032 myval improvement (+0.45%) can correspond to a 0.039 test regression (-5.6%). Small myval improvements should not be trusted without test confirmation.
+2. **Seed 123 has poor generalization**: Despite reasonable myval F1 (0.7086), seed 123 performs much worse on test. The 288px config at seed=42 is uniquely well-tuned.
+3. **All major hyperparameter directions exhausted**: No further low-hanging fruit. Current best is soup at 0.69856 test.
+
 ### Next Directions
-- TTA during training (use during validation for better epoch selection)
-- Multi-seed ensemble with best config (seeds 42, 123)
-- BBox-crop margin sweep
-- Try soup with different weightings (e.g., weighted by val_f1)
+- Need fundamentally new approach: model architecture change, advanced data augmentation, or more training data.
+- TTA during training (low priority, uncertain).

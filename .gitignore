@@ -6,9 +6,6 @@ mask
 preprocess/data-analysis/*.npy
 preprocess/data-analysis/*.png
 preprocess/data-analysis/*.json
-preprocess/bbox_crop/train/
-preprocess/bbox_crop/test/
-preprocess/bbox_crop/test_clean/
-preprocess/bbox_crop/myval/
+preprocess/bbox*
 *cache
 my-autoresearch
