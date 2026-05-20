@@ -162,6 +162,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--color-jitter-saturation", type=float, default=0.4)
     parser.add_argument("--color-jitter-hue", type=float, default=0.1)
     parser.add_argument("--label-smoothing", type=float, default=0.0)
+    parser.add_argument(
+        "--focal-gamma",
+        type=float,
+        default=0.0,
+        help="Focal loss gamma (0.0 disables focal loss, uses CE). Typical: 2.0.",
+    )
+    parser.add_argument(
+        "--focal-alpha",
+        type=float,
+        default=0.25,
+        help="Focal loss alpha (positive class weight). Default: 0.25.",
+    )
     parser.add_argument("--log-interval", type=int, default=50)
     parser.add_argument(
         "--early-stop",

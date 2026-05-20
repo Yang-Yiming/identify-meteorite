@@ -4,19 +4,40 @@
 
 Maximize **test** F1 (Kaggle). BBox-crop preprocessing is the **default
 pipeline**. Bayes correction is disabled (test distribution unknown).
-**Primary proxy metric: myval F1@0.5** — the 20% train split is saturated.
+**Primary proxy metric: myval F1@0.5**.
+
+**CRITICAL UPDATE (2026-05-20): myval is an unreliable proxy when mytest
+data is involved.** Adding mytest as training data inflates myval F1
+(+0.02~+0.04) but degrades test F1 (-0.03~-0.15). See "mytest Generalization
+Failure" below.
 
 ## Current State
 
-**Current best: myval_f1=0.7251@0.5, test_f1=0.69856** (soup checkpoint:
-top-3 epochs 20/39/26, 288px, seed=42, cosine, thr_search).
-Previous test best was 0.64516 (+0.0534).
+**Test SOTA: test_f1=0.69856** (soup checkpoint: top-3 epochs 20/39/26,
+288px, seed=42, cosine, thr=0.5, 4780 original bbox-crop images).
 
-Latest test: `mytest_v1_s42` used high-quality `mytest` as extra
-training/validation data. It reached `mytest_val_f1=0.8969` and sealed
-`myval_f1=0.7321@0.5`, but Kaggle test regressed to **0.65979**. DISCARD.
-This confirms that `myval` remains useful, but small myval gains are mostly
-noise; future KEEP decisions need a large sealed-myval improvement.
+| Run | myval F1@0.5 | test F1 | Description |
+|-----|-------------|---------|-------------|
+| soup (prev best) | 0.7251 | **0.69856** | no mytest |
+| mytest split protocol | 0.7321 | 0.65979 | mytest as train+val |
+| mytest pretrain→finetune | 0.7358 | 0.55214 | two-stage |
+| mytest aug + myval val | 0.7688 | 0.67021 | mytest merged, myval selects epoch |
+| split-val aug soup | 0.7446 | 0.63212 | no myval leak, still degraded |
+
+### mytest Generalization Failure
+
+Every approach that adds mytest data to training hurts test F1, regardless
+of whether myval leaks into training or not. The root cause is domain shift:
+mytest images come from Encyclopedia of Meteorites and Kaggle rock datasets,
+which have different visual characteristics from the competition test set.
+
+The myval→test gap widens with mytest involvement:
+- no mytest: gap ~0.027
+- mytest aug: gap ~0.099
+- mytest pretrain: gap ~0.184
+
+**Decision: Abandon mytest as training data.** Focus on methods that
+improve generalization without external data.
 
 ### Key Improvements Achieved
 
@@ -27,26 +48,25 @@ noise; future KEEP decisions need a large sealed-myval improvement.
 | + No Bayes + thresh=0.5 | **0.9708** | 0.6379 | 0.64516 |
 | + myval-as-validation + 288px + seed=42 + cosine | — | 0.7202 | — |
 | **+ top-3 model soup** | — | **0.7251** | **0.69856** |
-| + mytest train/val split | 0.8969 (mytest_val) | 0.7321 | 0.65979 |
 
 ### Discarded Directions
 
-- Multi-seed ensemble, cutmix=0.5, weight decay sweep, dropout at seed=42.
-- Label smoothing >0.1, higher/lower head_lr, lower backbone_lr.
-- Stochastic depth, stronger augs, pseudo-labeling.
-- Alternative backbones (convnext_small, efficientnet_b0, swin_tiny).
-- 320px resolution — myval F1 regressed to 0.6957.
-- TTA (post-hoc) — did not improve F1@0.5.
-- mytest split protocol — myval rose slightly to 0.7321, but test regressed to 0.65979.
+- Multi-seed ensemble, cutmix=0.5, weight decay sweep, dropout at seed=42
+- Label smoothing >0.1, higher/lower head_lr, lower backbone_lr
+- Stochastic depth, stronger augs, pseudo-labeling
+- Alternative backbones (convnext_small, efficientnet_b0, swin_tiny)
+- 320px resolution — myval F1 regressed to 0.6957
+- TTA (post-hoc) — did not improve F1@0.5
+- Focal loss — no myval gain over CE
+- **ALL mytest-based approaches** — myval up, test down
+  - mytest split protocol (0.65979)
+  - mytest pretrain→finetune (0.55214)
+  - mytest augmentation + myval val (0.67021)
+  - split-val + mytest augmentation (0.63212)
 
 ## Next Directions
 
-1. ~~**BBox-crop (bayes on)** — trsearch_bbox01: val_f1=0.9444. KEEP.~~
-2. ~~**BBox-crop (no bayes, thresh=0.5)** — trsearch_bbox02: val_f1=0.9708, test_f1=0.64516. KEEP — new SOTA.~~
-3. ~~TTA during validation/training — DISCARD (post-hoc TTA did not improve myval F1@0.5).~~
-4. ~~Model soup / weight averaging across epochs — KEEP (top-3: 0.7251 myval, 0.69856 test, +0.0049/+0.0534).~~
-5. ~~mytest split protocol — DISCARD (0.7321 myval but 0.65979 test).~~
-6. TTA during training — integrate into validation loop for better epoch selection.
-7. Multi-seed ensemble with current best config.
-8. Weighted model soup.
-9. BBox-crop margin sweep.
+1. K-fold bagging on original 4780 training data (no mytest)
+2. Data cleaning / hard negative mining within original train set
+3. Architecture exploration (ConvNeXt V2 at 224px, newer backbones)
+4. Multi-seed retry with split-val (not myval) to avoid proxy overfit

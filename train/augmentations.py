@@ -38,6 +38,28 @@ def soft_target_cross_entropy(
     return loss.mean()
 
 
+def focal_loss(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    alpha: float = 0.25,
+    gamma: float = 2.0,
+    class_weights: torch.Tensor | None = None,
+    sample_weights: torch.Tensor | None = None,
+) -> torch.Tensor:
+    probs = torch.softmax(logits, dim=1)
+    ce_loss = F.cross_entropy(logits, targets, reduction="none", weight=class_weights)
+    target_probs = probs.gather(1, targets.unsqueeze(1)).squeeze(1)
+    focal_weight = (1.0 - target_probs) ** gamma
+    if alpha != 1.0:
+        target_weights = torch.full_like(targets, 1.0 - alpha, dtype=torch.float32)
+        target_weights = torch.where(targets == 1, alpha, target_weights).to(device=logits.device)
+        focal_weight = focal_weight * target_weights
+    loss = focal_weight * ce_loss
+    if sample_weights is not None:
+        loss = loss * sample_weights
+    return loss.mean()
+
+
 def apply_cutmix(
     pixel_values: torch.Tensor,
     labels: torch.Tensor,

@@ -178,3 +178,83 @@ Config:     288px, margin=0.10, seed=42, cosine LR, thr_search, bbox-crop, no-Ba
 
 ### Key Learning
 `myval` is still the most useful offline proxy, but small improvements are noise. A move from 0.7251 to 0.7321 on `myval` was not enough; Kaggle test dropped from 0.69856 to 0.65979. Future KEEP decisions should require a **large** sealed-myval gain, not a marginal one, especially when the new training data is clean but source-uniform.
+
+## 2026-05-20: mytest Pretrain → Finetune
+
+- **Hypothesis**: Two-stage training — pretrain backbone on mytest (3955 raw images), then finetune on original bbox-crop data. Avoids domain-shift from direct mytest merge.
+- **Stage 1** (`train/outputs/mytest_pretrain`): Trained ConvNeXt Tiny on 3955 mytest images (1371 meteorite, 2584 rock). 288px, seed=42, cosine LR, cutmix=0.3, 15% val split.
+  - mytest_val F1@0.5 = **0.9277** (best_epoch=39)
+- **Stage 2** (`train/outputs/mytest_pretrain_finetune_v2`): Loaded pretrained backbone, finetuned on 4780 bbox-crop original training images. Same best config (288px, seed=42, cosine, no-Bayes).
+  - best_epoch=7, internal model_select_f1=0.7383
+  - **myval F1@0.5 = 0.7358** — NEW SOTA (+0.0107 over soup 0.7251)
+- **Model soup on top epochs**: DISCARD — soup_F1=0.7066, worse than single checkpoint.
+- **Verdict**: **KEEP** — mytest pretrain→finetune is the new best myval result.
+
+## 2026-05-20: Focal Loss
+
+- **Hypothesis**: Focal loss (gamma=2.0, alpha=0.25) improves hard negative mining.
+- **Baseline** (`train/outputs/myval_focal_v1`): Same config as soup but with focal loss.
+  - myval F1@0.5 = 0.7251 (tied with soup baseline)
+  - internal model_select_f1 = 0.7529 (soup was 0.7500)
+- **Combined** (`train/outputs/mytest_pretrain_focal`): Pretrain backbone + finetune with focal loss.
+  - myval F1@0.5 = 0.7304 (below pretrain-only 0.7358)
+- **Verdict**: Focal loss does not improve over CE for this task. The CutMix augmentation already provides sufficient regularization.
+
+## 2026-05-20: Lower Backbone LR for Pretrain→Finetune
+
+- **Hypothesis**: backbone_lr=3e-6 (instead of 1e-5) gives gentler finetuning for pretrained backbone.
+- myval F1@0.5 = 0.7122 — lower than baseline 0.7358.
+- **Verdict**: **DISCARD** — faster backbone adaptation is better (1e-5 works best).
+
+### Updated Best
+```
+Run:        mytest_pretrain_finetune_v2 (epoch 7)
+Myval F1:   0.7358@0.5
+Test F1:    0.55214  ← DISCARD, severe myval-test gap
+Config:     288px, seed=42, cosine, no-Bayes, bbox-crop
+            Stage1: mytest pretrain (mytest_val=0.9277)
+            Stage2: finetune on original bbox-crop data
+Checkpoint: train/outputs/mytest_pretrain_finetune_v2/best.pt
+```
+
+## 2026-05-20: mytest Augmentation + myval Validation
+
+- **Hypothesis**: Simply merge all mytest into training, use myval as validation (same as soup baseline). This is the most direct extension: soup + more data.
+- **v1** (`train/outputs/mytest_augment_v1`): Single checkpoint, myval F1@0.5 = **0.7561**
+- **v2 soup** (`train/outputs/mytest_augment_v2/soup_top3.pt`): Top-3 uniform soup (epochs 34/28/35), myval F1@0.5 = **0.7688**
+  - internal model_select_f1 = 0.7927
+- **Kaggle test**: 0.67021 — myval-test gap = 0.0986 (vs 0.0265 for old soup).
+- **Verdict**: **DISCARD** — mytest inflates myval but degrades test. Adding mytest as training data consistently hurts generalization.
+
+## 2026-05-20: Split-Validation with mytest Augmentation
+
+- **Hypothesis**: If myval-as-validation leaks information, use internal 20% random split as validation instead. myval is completely held out.
+- **Config** (`train/outputs/splitval_augment_v1`): `--val-split-ratio 0.2 --mytest-root --mytest-val-ratio 0.0`. Full mytest merged, 20% of combined data as val.
+  - internal val_f1 = 0.9609 (best_epoch=53)
+  - top-3 soup: myval F1@0.5 = 0.7446
+- **Kaggle test**: 0.63212 — still degraded.
+- **Verdict**: **DISCARD** — Eliminating myval leakage did not fix the problem. The mytest data itself introduces domain shift that hurts test performance regardless of validation strategy.
+
+## 2026-05-20: Conclusion on mytest
+
+**All 5 mytest-based experiments degraded test F1:**
+
+| Experiment | myval | test | gap |
+|------------|-------|------|-----|
+| Old soup (no mytest) | 0.7251 | **0.69856** | 0.0265 |
+| mytest split protocol | 0.7321 | 0.65979 | 0.0723 |
+| mytest pretrain→finetune | 0.7358 | 0.55214 | 0.1837 |
+| mytest aug + myval val | 0.7688 | 0.67021 | 0.0986 |
+| split-val aug (no myval leak) | 0.7446 | 0.63212 | 0.1125 |
+
+**Root cause:** mytest comes from Encyclopedia of Meteorites and Kaggle rock datasets — visually different from the competition test set. The model learns mytest-specific features that inflate myval (myval has similar clean images) but don't generalize to test.
+
+**Decision: Abandon mytest entirely. Focus on original training data (4780 bbox-crop images) only.**
+
+### Reverted Best (unchanged)
+```
+Run:        myval_v13_hi288_seed42_soup (top-3: epochs 20, 39, 26)
+Myval F1:   0.7251@0.5
+Test F1:    0.69856
+Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
+```

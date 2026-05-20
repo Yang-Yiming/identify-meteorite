@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from augmentations import apply_cutmix, apply_mixup, build_soft_targets, soft_target_cross_entropy
+from augmentations import apply_cutmix, apply_mixup, build_soft_targets, focal_loss, soft_target_cross_entropy
 from calibration import (
     POSITIVE_LABEL,
     apply_bayes_prior_correction,
@@ -79,6 +79,8 @@ def run_epoch(
     log_interval: int = 0,
     max_grad_norm: float = 0.0,
     ema=None,
+    focal_gamma: float = 0.0,
+    focal_alpha: float = 0.25,
 ) -> Dict[str, object]:
     is_train = optimizer is not None
     model.train(mode=is_train)
@@ -102,6 +104,7 @@ def run_epoch(
         sample_weights = sample_weights.to(device, non_blocking=True)
 
         soft_targets = build_soft_targets(labels, num_classes=num_classes, smoothing=label_smoothing)
+        batch_mixed = False
         if is_train:
             mixed_batch = apply_cutmix(
                 pixel_values,
@@ -117,6 +120,7 @@ def run_epoch(
             sample_weights = mixed_batch.sample_weights
             if mixed_batch.applied:
                 cutmix_batches += 1
+                batch_mixed = True
 
             mixed_batch2 = apply_mixup(
                 pixel_values,
@@ -132,18 +136,30 @@ def run_epoch(
             sample_weights = mixed_batch2.sample_weights
             if mixed_batch2.applied:
                 mixup_batches += 1
+                batch_mixed = True
 
             optimizer.zero_grad(set_to_none=True)
 
         with torch.set_grad_enabled(is_train):
             with torch.amp.autocast(device_type=device.type, enabled=autocast_enabled):
                 logits = model(pixel_values)
-                loss = soft_target_cross_entropy(
-                    logits,
-                    soft_targets,
-                    class_weights=class_weights,
-                    sample_weights=sample_weights,
-                )
+                use_focal = is_train and focal_gamma > 0.0 and not batch_mixed
+                if use_focal:
+                    loss = focal_loss(
+                        logits,
+                        labels,
+                        alpha=focal_alpha,
+                        gamma=focal_gamma,
+                        class_weights=class_weights,
+                        sample_weights=sample_weights,
+                    )
+                else:
+                    loss = soft_target_cross_entropy(
+                        logits,
+                        soft_targets,
+                        class_weights=class_weights,
+                        sample_weights=sample_weights,
+                    )
 
             if is_train:
                 assert scaler is not None
@@ -779,6 +795,8 @@ def main() -> None:
             log_interval=args.log_interval,
             max_grad_norm=args.max_grad_norm,
             ema=ema,
+            focal_gamma=args.focal_gamma,
+            focal_alpha=args.focal_alpha,
         )
         global_step = int(train_metrics.get("global_step", global_step))
         if scheduler is not None:
