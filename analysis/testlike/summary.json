@@ -1,0 +1,38 @@
+{
+  "by_source": {
+    "mytest": 3955,
+    "myval": 332,
+    "test": 176,
+    "train": 4780
+  },
+  "cluster_val_by_label": {
+    "0": 198,
+    "1": 202
+  },
+  "cluster_val_by_source": {
+    "myval": 54,
+    "train": 346
+  },
+  "clusters": 24,
+  "feature_rows": 9243,
+  "manifest_rows": 9637,
+  "not_stone_txt": "post_process/not-stone_best_071962.txt",
+  "outputs": {
+    "cluster_summary": "analysis/testlike/cluster_summary.csv",
+    "cluster_val": "analysis/testlike/test_like_val_cluster.csv",
+    "manifest": "analysis/testlike/manifest.csv",
+    "scores": "analysis/testlike/test_like_scores.csv",
+    "top_val": "analysis/testlike/test_like_val_top.csv",
+    "weighted_val": "analysis/testlike/test_like_val_weighted.csv"
+  },
+  "test_anchor_count": 176,
+  "top_n": 400,
+  "top_val_by_label": {
+    "0": 200,
+    "1": 200
+  },
+  "top_val_by_source": {
+    "myval": 36,
+    "train": 364
+  }
+}
