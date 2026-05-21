@@ -7,11 +7,35 @@ Pipeline: ConvNeXt Tiny backbone + light classifier head, AdamW, two-stage train
 ## Best Test Result
 | Metric | Value |
 |--------|-------|
-| **test F1** | **0.69856** |
+| **test F1** | **0.71962** |
 | **myval F1@0.5** | **0.7251** |
-| Run | `train/outputs/myval_v13_hi288_seed42_soup` |
-| Config | 288px, seed=42, cosine LR, thr=0.5, bbox-crop, no-Bayes, top-3 soup (epochs 20/39/26) |
+| Run | `train/outputs/myval_v13_hi288_seed42_soup` + reduced not-stone post-process |
+| Config | 288px, seed=42, cosine LR, thr=0.5, bbox-crop, no-Bayes, top-3 soup (epochs 20/39/26), reduced force-zero list |
 | Train set | 4780 bbox-crop images (original only) |
+
+## not-stone Post-process Update
+
+The previous full `post_process/not-stone.txt` force-zero list was too
+aggressive. Reducing the list improved test F1 from 0.69856 to **0.71962**.
+
+Current best force-zero list:
+
+```text
+18
+23
+44
+72
+100
+133
+145
+162
+187
+```
+
+A 4-image ablation restored `18,23,72,133` to positive and scored 0.71559.
+The F1 arithmetic implies roughly one of those four is truly positive and
+three are truly negative. The next best single-ID candidate is likely restoring
+only `23`, while keeping `18,44,72,100,133,145,162,187` forced to 0.
 
 ## mytest Generalization Failure
 

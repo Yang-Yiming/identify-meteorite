@@ -259,6 +259,100 @@ Test F1:    0.69856
 Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
 ```
 
+## 2026-05-21: not-stone post-process audit
+
+### Background
+
+The previous public best submission used the soup raw CSV from
+`train/outputs/myval_v13_hi288_seed42_soup/submission_raw.csv`, followed by
+`post_process/zero_not_stone.py` using a manually maintained
+`post_process/not-stone.txt` force-zero list.
+
+Manual review and a quick visual clustering pass showed that the old list
+mixed several different failure modes. Some entries are obvious non-meteorite
+objects, but others look like plausible cut/polished meteorite or mineral
+specimens. All listed IDs are `*_nomask.done` in `preprocess/bbox_crop/test`,
+so the list appears to be partly driven by SAM/bbox mask failure, not by direct
+class evidence.
+
+### Submissions
+
+Known test F1 results:
+
+| not-stone policy | test F1 | Note |
+|---|---:|---|
+| old full force-zero list | 0.69856 | previous soup processed result |
+| reduced 9-id list | **0.71962** | current best |
+| reduced list but restore `18,23,72,133` to positive | 0.71559 | last 2026-05-21 submission |
+
+The current best 9-id list is:
+
+```text
+18
+23
+44
+72
+100
+133
+145
+162
+187
+```
+
+For the soup raw CSV, only six of these actually change the submission label
+from 1 to 0:
+
+```text
+18
+23
+44
+72
+133
+162
+```
+
+`100`, `145`, and `187` are already predicted as 0 by the raw soup submission.
+
+### F1 inference
+
+The 4-image ablation changed `18,23,72,133` from 0 to 1 and dropped test F1
+from 0.71962 to 0.71559. Since
+
+```text
+F1 = 2TP / (2TP + FP + FN)
+```
+
+the rounded scores are consistent with:
+
+```text
+reduced 9-id list:      TP = 77, denominator = 214, F1 = 154/214 = 0.719626
+4-image restored list:  TP = 78, denominator = 218, F1 = 156/218 = 0.715596
+```
+
+This implies that among `18,23,72,133`, approximately exactly one is truly
+positive and the other three are truly negative.
+
+The earlier jump from 0.69856 to 0.71962 after removing
+`48,67,154,159,185` from the force-zero list is consistent with about four of
+those five being true positives. The original not-stone list therefore did
+contain substantial false force-zero errors.
+
+### Current hypothesis
+
+Keep obvious poison IDs forced to 0, especially `44` and `162`. The most useful
+next single-ID ablation is likely to restore only `23` while keeping
+`18,44,72,100,133,145,162,187` forced to 0.
+
+Expected outcomes for restoring only `23`:
+
+```text
+if 23 is truly positive: F1 ~= 156/215 = 0.72558
+if 23 is truly negative: F1 ~= 154/215 = 0.71628
+```
+
+This hypothesis is also saved as
+`post_process/not-stone_candidate_remove_23.txt`.
+
 ## 2026-05-21: Backbone Exploration
 
 - **convnext_small + mytest + split-val** (`backbone_cs_augment/soup_top3.pt`):
