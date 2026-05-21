@@ -66,7 +66,11 @@ improve generalization without external data.
 
 ## Next Directions
 
-1. K-fold bagging on original 4780 training data (no mytest)
-2. Data cleaning / hard negative mining within original train set
-3. Architecture exploration (ConvNeXt V2 at 224px, newer backbones)
-4. Multi-seed retry with split-val (not myval) to avoid proxy overfit
+1. K-fold bagging on original 4780 training data (no mytest) — already implemented in `run_kfold_bagging.py`
+2. Train on **original full images + bbox-crop jointly** — bbox-crop loses environmental context. Two-input or alternating batches.
+3. **Pseudo-label test set** — use best model to soft-label test images, retrain with them as semi-supervised data. Directly adapts to test distribution.
+4. **Data cleaning on train set** — find and fix potential mislabeled samples in 4780 images
+5. **Multi-seed ensemble** with split-val — avoid myval leak, try 5 seeds on original data
+6. **Multi-scale TTA** — ensemble predictions at 224px, 288px, 384px
+7. **CLIP-based model** — stronger visual features from large-scale pretraining
+8. Architecture exploration — ConvNeXt V2 at 224px (no mytest, OOM at 288px)

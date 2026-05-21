@@ -258,3 +258,35 @@ Myval F1:   0.7251@0.5
 Test F1:    0.69856
 Checkpoint: train/outputs/myval_v13_hi288_seed42_soup/soup.pt
 ```
+
+## 2026-05-21: Backbone Exploration
+
+- **convnext_small + mytest + split-val** (`backbone_cs_augment/soup_top3.pt`):
+  - internal val=0.9580, myval=0.7774, test=**0.65263** — DISCARD
+- **convnext_small NO mytest** (`backbone_cs_no_mytest/soup_top3_v2.pt`):
+  - internal val=0.9767, myval=0.6875 — worse than tiny (0.7251)
+- **convnextv2_tiny + mytest** (`backbone_cnv2_augment/best.pt`):
+  - internal val=0.9551, myval=0.7251 — tied with tiny, no gain
+- **DINO ViT-S + split-val** (`backbone_dino_v1/`):
+  - internal val=0.9785, myval=0.6648 — severe overfitting on small data
+
+### Conclusion
+- Larger backbone (convnext_small) does NOT improve test on original data alone
+- mytest inflates myval for ALL backbones but degrades test
+- ViT/DINO fundamentally data-hungry; 4780 images insufficient
+- The bottleneck is DATA, not model capacity
+
+## 2026-05-21: Final mytest Verdict
+
+**6/6 mytest experiments degraded Kaggle test F1:**
+
+| # | Experiment | myval | test | Δ test |
+|---|-----------|-------|------|--------|
+| 1 | mytest split protocol | 0.7321 | 0.65979 | -0.039 |
+| 2 | mytest pretrain→finetune | 0.7358 | 0.55214 | -0.146 |
+| 3 | mytest aug + myval val (soup) | 0.7688 | 0.67021 | -0.028 |
+| 4 | split-val aug (tiny soup) | 0.7446 | 0.63212 | -0.066 |
+| 5 | split-val aug (small soup) | 0.7774 | 0.65263 | -0.046 |
+| 6 | split-val aug (cnv2 tiny) | 0.7251 | TBD | — |
+
+**mytest is proven harmful. Abandoned permanently.**
