@@ -237,6 +237,18 @@ def main() -> None:
     parser.add_argument("--top-n", type=int, default=400)
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--fit-sources",
+        type=str,
+        default="train,myval,test,mytest",
+        help="Comma-separated sources used to fit scaler/PCA/clusters and test-likeness space.",
+    )
+    parser.add_argument(
+        "--candidate-sources",
+        type=str,
+        default="train,myval",
+        help="Comma-separated labeled sources eligible for hard/weighted val outputs.",
+    )
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -245,8 +257,16 @@ def main() -> None:
 
     feature_df = manifest[manifest["has_image"]].copy().reset_index(drop=True)
     features = np.stack([image_feature(Path(path)) for path in feature_df["path"]])
-    features_scaled = StandardScaler().fit_transform(features)
-    features_pca = PCA(n_components=min(64, features_scaled.shape[1]), random_state=args.seed).fit_transform(features_scaled)
+    fit_sources = {item.strip() for item in args.fit_sources.split(",") if item.strip()}
+    candidate_sources = {item.strip() for item in args.candidate_sources.split(",") if item.strip()}
+    fit_mask = feature_df["source"].isin(fit_sources).to_numpy()
+    if not fit_mask.any():
+        raise RuntimeError(f"No rows matched --fit-sources={args.fit_sources}")
+    scaler = StandardScaler().fit(features[fit_mask])
+    features_scaled = scaler.transform(features)
+    pca_components = min(64, int(fit_mask.sum()), features_scaled.shape[1])
+    pca = PCA(n_components=pca_components, random_state=args.seed).fit(features_scaled[fit_mask])
+    features_pca = pca.transform(features_scaled)
     features_norm = features_pca / np.maximum(np.linalg.norm(features_pca, axis=1, keepdims=True), 1e-8)
 
     test_mask = (feature_df["source"] == "test") & (~feature_df["is_not_stone"])
@@ -263,8 +283,10 @@ def main() -> None:
     test_centroid = test_centroid / np.maximum(np.linalg.norm(test_centroid), 1e-8)
     feature_df["test_like_centroid_cos"] = cosine_similarity(features_norm, test_centroid).reshape(-1)
 
-    kmeans = KMeans(n_clusters=args.clusters, random_state=args.seed, n_init=10)
-    feature_df["cluster"] = kmeans.fit_predict(features_norm)
+    n_clusters = min(args.clusters, int(fit_mask.sum()))
+    kmeans = KMeans(n_clusters=n_clusters, random_state=args.seed, n_init=10)
+    kmeans.fit(features_norm[fit_mask])
+    feature_df["cluster"] = kmeans.predict(features_norm)
     cluster_summary = (
         feature_df.groupby("cluster")
         .agg(
@@ -309,7 +331,7 @@ def main() -> None:
     scores = feature_df[score_cols].sort_values("test_like_score", ascending=False)
     scores.to_csv(args.out_dir / "test_like_scores.csv", index=False)
 
-    labeled = scores[(scores["source"].isin(["train", "myval"])) & scores["label"].notna()].copy()
+    labeled = scores[(scores["source"].isin(candidate_sources)) & scores["label"].notna()].copy()
     top_val = stratified_take(labeled, args.top_n, args.seed)
     cluster_val = cluster_stratified_take(labeled, args.top_n, args.seed)
     weighted = labeled.copy()
@@ -328,7 +350,10 @@ def main() -> None:
         "test_anchor_count": int(test_mask.sum()),
         "not_stone_txt": str(args.not_stone_txt),
         "clusters": int(args.clusters),
+        "actual_clusters": int(n_clusters),
         "top_n": int(args.top_n),
+        "fit_sources": sorted(fit_sources),
+        "candidate_sources": sorted(candidate_sources),
         "outputs": {
             "manifest": str(args.out_dir / "manifest.csv"),
             "scores": str(args.out_dir / "test_like_scores.csv"),

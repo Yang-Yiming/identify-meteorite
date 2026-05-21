@@ -223,6 +223,7 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=Path("analysis/testlike/manifest.csv"))
     parser.add_argument("--cluster-val", type=Path, default=Path("analysis/testlike/test_like_val_cluster.csv"))
     parser.add_argument("--top-val", type=Path, default=Path("analysis/testlike/test_like_val_top.csv"))
+    parser.add_argument("--dataset-prefix", type=str, default="v1")
     parser.add_argument("--out-dir", type=Path, default=Path("analysis/testlike_eval"))
     parser.add_argument("--batch-size", type=int, default=96)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -239,8 +240,8 @@ def main() -> None:
     top_val = pd.read_csv(args.top_val)
     datasets = {
         "myval_masked": myval,
-        "testlike_cluster_v1": cluster_val,
-        "testlike_top_v1": top_val,
+        f"testlike_cluster_{args.dataset_prefix}": cluster_val,
+        f"testlike_top_{args.dataset_prefix}": top_val,
     }
 
     rows: list[dict[str, object]] = []
@@ -299,9 +300,9 @@ def main() -> None:
         "known_test_f1",
         "known_myval_f1_from_docs",
         "f1_at_0_5__myval_masked",
-        "f1_at_0_5__testlike_cluster_v1",
-        "f1_at_0_5__testlike_top_v1",
-        "best_f1__testlike_cluster_v1",
+        f"f1_at_0_5__testlike_cluster_{args.dataset_prefix}",
+        f"f1_at_0_5__testlike_top_{args.dataset_prefix}",
+        f"best_f1__testlike_cluster_{args.dataset_prefix}",
         "note",
     ]
     markdown.append(markdown_table(pivot[display_cols], floatfmt=".4f"))
