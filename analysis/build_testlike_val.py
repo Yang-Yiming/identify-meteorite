@@ -20,11 +20,15 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
+import timm
+import torch
 from PIL import Image, ImageOps
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
+from timm.data import create_transform, resolve_model_data_config
+from torch.utils.data import DataLoader, Dataset
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
@@ -180,6 +184,57 @@ def image_feature(path: Path, size: int = 128) -> np.ndarray:
     return np.concatenate(feats).astype(np.float32)
 
 
+class ImagePathDataset(Dataset):
+    def __init__(self, paths: list[str], transform) -> None:
+        self.paths = paths
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return len(self.paths)
+
+    def __getitem__(self, index: int):
+        image = Image.open(self.paths[index]).convert("RGB")
+        image = ImageOps.exif_transpose(image)
+        return self.transform(image), index
+
+
+def extract_stats_features(paths: list[str]) -> np.ndarray:
+    return np.stack([image_feature(Path(path)) for path in paths])
+
+
+def extract_dino_timm_features(
+    paths: list[str],
+    model_name: str,
+    batch_size: int,
+    num_workers: int,
+    device: str,
+) -> np.ndarray:
+    torch_device = torch.device(device)
+    model = timm.create_model(model_name, pretrained=True, num_classes=0)
+    model.eval().to(torch_device)
+    data_config = resolve_model_data_config(model)
+    transform = create_transform(**data_config, is_training=False)
+    dataset = ImagePathDataset(paths, transform)
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=torch_device.type == "cuda",
+    )
+    features: list[np.ndarray] = [None] * len(paths)  # type: ignore[list-item]
+    autocast_enabled = torch_device.type == "cuda"
+    with torch.no_grad():
+        for images, indices in loader:
+            images = images.to(torch_device)
+            with torch.amp.autocast(device_type=torch_device.type, enabled=autocast_enabled):
+                batch_features = model(images)
+            batch_features = batch_features.detach().float().cpu().numpy()
+            for row, index in zip(batch_features, indices.tolist()):
+                features[index] = row
+    return np.stack(features).astype(np.float32)
+
+
 def stratified_take(df: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
     if df.empty:
         return df
@@ -249,16 +304,42 @@ def main() -> None:
         default="train,myval",
         help="Comma-separated labeled sources eligible for hard/weighted val outputs.",
     )
+    parser.add_argument(
+        "--feature-sources",
+        type=str,
+        default="train,myval,test,mytest",
+        help="Comma-separated sources to actually featurize and score.",
+    )
+    parser.add_argument("--feature-backend", choices=("stats", "dino_timm"), default="stats")
+    parser.add_argument("--dino-model", type=str, default="vit_base_patch14_dinov2")
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     manifest = build_manifest(args)
     manifest.to_csv(args.out_dir / "manifest.csv", index=False)
 
-    feature_df = manifest[manifest["has_image"]].copy().reset_index(drop=True)
-    features = np.stack([image_feature(Path(path)) for path in feature_df["path"]])
     fit_sources = {item.strip() for item in args.fit_sources.split(",") if item.strip()}
     candidate_sources = {item.strip() for item in args.candidate_sources.split(",") if item.strip()}
+    feature_sources = {item.strip() for item in args.feature_sources.split(",") if item.strip()}
+    required_sources = fit_sources | candidate_sources | {"test"}
+    missing_required = required_sources - feature_sources
+    if missing_required:
+        raise RuntimeError(f"--feature-sources must include required sources: {sorted(missing_required)}")
+    feature_df = manifest[(manifest["has_image"]) & (manifest["source"].isin(feature_sources))].copy().reset_index(drop=True)
+    paths = feature_df["path"].astype(str).tolist()
+    if args.feature_backend == "stats":
+        features = extract_stats_features(paths)
+    else:
+        features = extract_dino_timm_features(
+            paths=paths,
+            model_name=args.dino_model,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            device=args.device,
+        )
     fit_mask = feature_df["source"].isin(fit_sources).to_numpy()
     if not fit_mask.any():
         raise RuntimeError(f"No rows matched --fit-sources={args.fit_sources}")
@@ -354,6 +435,9 @@ def main() -> None:
         "top_n": int(args.top_n),
         "fit_sources": sorted(fit_sources),
         "candidate_sources": sorted(candidate_sources),
+        "feature_sources": sorted(feature_sources),
+        "feature_backend": args.feature_backend,
+        "dino_model": args.dino_model if args.feature_backend == "dino_timm" else None,
         "outputs": {
             "manifest": str(args.out_dir / "manifest.csv"),
             "scores": str(args.out_dir / "test_like_scores.csv"),

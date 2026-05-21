@@ -1,0 +1,48 @@
+{
+  "actual_clusters": 16,
+  "by_source": {
+    "myval": 332,
+    "test": 176
+  },
+  "candidate_sources": [
+    "myval"
+  ],
+  "cluster_val_by_label": {
+    "0": 82,
+    "1": 78
+  },
+  "cluster_val_by_source": {
+    "myval": 160
+  },
+  "clusters": 16,
+  "dino_model": "vit_base_patch14_dinov2",
+  "feature_backend": "dino_timm",
+  "feature_rows": 508,
+  "feature_sources": [
+    "myval",
+    "test"
+  ],
+  "fit_sources": [
+    "myval",
+    "test"
+  ],
+  "manifest_rows": 9637,
+  "not_stone_txt": "post_process/not-stone_best_071962.txt",
+  "outputs": {
+    "cluster_summary": "analysis/testlike_dino_myval_v3/cluster_summary.csv",
+    "cluster_val": "analysis/testlike_dino_myval_v3/test_like_val_cluster.csv",
+    "manifest": "analysis/testlike_dino_myval_v3/manifest.csv",
+    "scores": "analysis/testlike_dino_myval_v3/test_like_scores.csv",
+    "top_val": "analysis/testlike_dino_myval_v3/test_like_val_top.csv",
+    "weighted_val": "analysis/testlike_dino_myval_v3/test_like_val_weighted.csv"
+  },
+  "test_anchor_count": 176,
+  "top_n": 160,
+  "top_val_by_label": {
+    "0": 80,
+    "1": 80
+  },
+  "top_val_by_source": {
+    "myval": 160
+  }
+}
