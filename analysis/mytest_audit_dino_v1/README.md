@@ -37,3 +37,31 @@ Use this file to identify:
 - mytest samples that are very close to test-like reference regions
 - candidate images for manual review or low-weight semi-supervised use
 
+## Train-Candidate Filters
+
+Additional candidate CSVs were generated from `mytest_neighbor_summary.csv`.
+They are meant for cautious training experiments, not as trusted ground truth.
+
+| filter | count | label 0 | label 1 | rule |
+|---|---:|---:|---:|---|
+| strict | 161 | 130 | 31 | `top10_test_frac >= 0.2`, `top10_same_label_frac >= 0.8`, `conflict_score <= 2.0`, `top1_sim >= 0.75` |
+| medium | 682 | 481 | 201 | `top10_test_frac >= 0.1`, `top10_same_label_frac >= 0.7`, `conflict_score <= 3.0`, `top1_sim >= 0.7` |
+| testprox | 298 | 252 | 46 | `top10_test_frac >= 0.2`, `conflict_score <= 4.0`, `top1_sim >= 0.7` |
+
+Files:
+
+- `mytest_train_candidates_strict.csv`
+- `mytest_train_candidates_medium.csv`
+- `mytest_train_candidates_testprox.csv`
+- `*_train_manifest.csv` compact path/label/weight manifests
+
+Local symlink roots were also created for direct use with `train_finetune.py`:
+
+```text
+analysis/mytest_audit_dino_v1/filtered_roots/strict
+analysis/mytest_audit_dino_v1/filtered_roots/medium
+analysis/mytest_audit_dino_v1/filtered_roots/testprox
+```
+
+The safest first experiment is `strict`, preferably with `--mytest-val-ratio 0`
+and conservative early stopping on a non-mytest validation source.
