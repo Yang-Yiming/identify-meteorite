@@ -469,3 +469,65 @@ supervision still shifts the decision boundary in a risky direction.
 | 6 | split-val aug (cnv2 tiny) | 0.7251 | TBD | — |
 
 **mytest is proven harmful. Abandoned permanently.**
+
+## 2026-05-22: Testlike V3 改进尝试 + 新模型探索
+
+### Testlike V3 分数提升尝试
+
+当前 soup baseline 在 testlike_dino_myval_v3 上: cluster=0.7709, top=0.8045
+
+| # | 方法 | cluster Δ | top Δ | myval Δ | verdict |
+|---|------|----------|-------|---------|---------|
+| 1 | 全checkpoint评估(60+个) | — | — | — | mytest模型cluster达0.8066但test F1差 |
+| 2 | 非mytest模型Ensemble | +0.009 | +0.023 | — | 小幅提升, soup+best组合最优 |
+| 3 | 温度校准/阈值优化 | 0 | 0 | — | 阈值为0.5已最优 |
+| 4 | testlike cluster作validation训练 | -0.050 | -0.033 | -0.042 | 160张小验证集导致过拟合 |
+| 5 | testlikeness加权训练 | -0.062 | -0.038 | — | 模型变激进但准确率下降 |
+| 6 | not-stone恢复ID 18 | — | — | — | test降至0.71627, DISCARD |
+| 7 | not-stone恢复ID 18+162 | — | — | — | test降至0.71296, DISCARD |
+
+### 关键发现: Testlike V4 (train candidates) 诊断质量
+
+重建testlike用train作candidate source (替代myval):
+- **V3 (myval candidates)**: rank correlation = **-0.40** — 反转排序!
+- **V4 (train candidates)**: rank correlation = **+0.97** — 正确排序
+
+V3本身偏向mytest模型(因myval与mytest相似), 需用V4作离线诊断。
+
+### DINOv3预训练 ConvNeXt Tiny (backbone探索)
+
+- **配置**: `convnext_tiny.dinov3_lvd1689m`, 288px, seed=42, 标准配置
+- **Run**: `train/outputs/dinov3_tiny_288_s42`
+- **myval F1@0.5**: **0.6891** (vs soup 0.7251, -0.036)
+- **Verdict**: **DISCARD** — DINOv3预训练未提升, 可能因自监督特征不适配此细粒度分类
+
+### ConvNeXt V2 Tiny (backbone探索)
+
+- **配置**: `convnextv2_tiny.fcmae_ft_in22k_in1k_384`, 288px, seed=42
+- **Run**: `train/outputs/cnv2_tiny_288_s42`
+- **myval F1@0.5**: **0.6736** (vs soup 0.7251, -0.052)
+- **Verdict**: **DISCARD** — V2架构未提升
+
+### DINOv2 Frozen Features + MLP (新范式) ⭐
+
+**完全不同的方法**: 用DINOv2 ViT-B/14冻结特征 + 轻量MLP分类器
+
+| Run | myval F1@0.5 | testlike cluster | testlike top | verdict |
+|-----|-------------|-----------------|-------------|---------|
+| dinov2_mlp (lr=1e-3, ep=100) | **0.7530** | — | — | **BEST myval** (但未保存模型) |
+| dinov2_mlp_v2 (lr=1e-3, ep=80) | **0.7416** | 0.7735 | 0.8068 | **KEEP** — 全面超过soup |
+| dinov2_mlp_v3 (lr=1e-3, ep=200) | 0.7365 | — | — | 200 epochs无进一步改善 |
+
+**vs Soup baseline**: myval +0.0165, cluster +0.0026, top +0.0023
+
+### Key Insight
+
+DINOv2预训练特征 (在LVD-142M上自监督学习) 的表示质量远超ImageNet-1k预训练。即使只用简单MLP分类器, 也能超过端到端finetune的ConvNeXt Tiny。
+
+### Next Directions
+
+1. **DINOv2 MLP ensemble** — 多epoch的MLP权重平均(model soup)
+2. **更大的DINOv2模型** — `vit_large_patch14_dinov2` (但518px可能显存不足)
+3. **DINOv2 MLP + ConvNeXt Soup ensemble** — 已测试, 反而降低分数(-0.007), 因模型相关度过高
+4. **pseudo-labeling on test** — 用DINOv2 MLP的高置信度预测作伪标签重训ConvNeXt
+5. **提交 DINOv2 MLP 到 Kaggle** — 当前最有希望的配置
