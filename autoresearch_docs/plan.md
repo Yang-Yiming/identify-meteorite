@@ -4,21 +4,30 @@
 
 Maximize **test** F1 (Kaggle). BBox-crop preprocessing is the **default
 pipeline**. Bayes correction is disabled (test distribution unknown).
-**Primary proxy metric: myval F1@0.5**.
+Offline selection must now report both **myval F1@0.5** and the frozen-DINO
+test-like diagnostic.
 
 **CRITICAL UPDATE (2026-05-20): myval is an unreliable proxy when mytest
 data is involved.** Adding mytest as training data inflates myval F1
 (+0.02~+0.04) but degrades test F1 (-0.03~-0.15). See "mytest Generalization
 Failure" below.
 
+**CRITICAL UPDATE (2026-05-22): use the DINO test-like diagnostic for every
+new run.** The hard test-like val lists are not a final judge, but they are the
+best available target-distribution diagnostic. Any new checkpoint should be
+compared against the current soup baseline in
+`analysis/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.csv`.
+
 ## Current State
 
-**Test SOTA: test_f1=0.69856** (soup checkpoint: top-3 epochs 20/39/26,
-288px, seed=42, cosine, thr=0.5, 4780 original bbox-crop images).
+**Test SOTA: test_f1=0.71962** (soup checkpoint: top-3 epochs 20/39/26,
+288px, seed=42, cosine, thr=0.5, 4780 original bbox-crop images, reduced
+not-stone post-process).
 
 | Run | myval F1@0.5 | test F1 | Description |
 |-----|-------------|---------|-------------|
-| soup (prev best) | 0.7251 | **0.69856** | no mytest |
+| soup + reduced not-stone | 0.7251 | **0.71962** | current SOTA |
+| soup (old full not-stone) | 0.7251 | 0.69856 | old post-process |
 | mytest split protocol | 0.7321 | 0.65979 | mytest as train+val |
 | mytest pretrain→finetune | 0.7358 | 0.55214 | two-stage |
 | mytest aug + myval val | 0.7688 | 0.67021 | mytest merged, myval selects epoch |
@@ -36,8 +45,9 @@ The myval→test gap widens with mytest involvement:
 - mytest aug: gap ~0.099
 - mytest pretrain: gap ~0.184
 
-**Decision: Abandon mytest as training data.** Focus on methods that
-improve generalization without external data.
+**Decision: do not use mytest as trusted supervised data.** Filtered or
+low-weight mytest experiments are allowed, but they must be judged by myval and
+DINO diagnostics before any submission.
 
 ### Key Improvements Achieved
 
@@ -47,7 +57,44 @@ improve generalization without external data.
 | + BBox-crop (bayes on) | 0.9444 | — | — |
 | + No Bayes + thresh=0.5 | **0.9708** | 0.6379 | 0.64516 |
 | + myval-as-validation + 288px + seed=42 + cosine | — | 0.7202 | — |
-| **+ top-3 model soup** | — | **0.7251** | **0.69856** |
+| + top-3 model soup | — | **0.7251** | 0.69856 |
+| **+ reduced not-stone post-process** | — | **0.7251** | **0.71962** |
+
+### Current Offline Comparison Protocol
+
+For every new run, report at least:
+
+1. post-hoc myval F1@0.5:
+
+   ```bash
+   python analysis/prob_dist.py \
+     --checkpoint train/outputs/<run_name>/best.pt \
+     --mask-dir preprocess/bbox_crop \
+     --val-source myval \
+     --no-plot \
+     --device cuda \
+     --batch-size 128
+   ```
+
+2. DINO test-like diagnostic:
+
+   ```bash
+   python analysis/evaluate_testlike_proxy.py \
+     --manifest analysis/testlike_dino_myval_v3/manifest.csv \
+     --cluster-val analysis/testlike_dino_myval_v3/test_like_val_cluster.csv \
+     --top-val analysis/testlike_dino_myval_v3/test_like_val_top.csv \
+     --dataset-prefix <run_tag> \
+     --out-dir analysis/testlike_<run_tag>_eval \
+     --device cuda \
+     --batch-size 128 \
+     --num-workers 4
+   ```
+
+Current soup baseline in the DINO diagnostic:
+
+| run | myval_masked F1@0.5 | DINO cluster F1@0.5 | DINO top F1@0.5 |
+|---|---:|---:|---:|
+| `soup_reduced_notstone` | 0.7230 | 0.7709 | 0.8045 |
 
 ### Discarded Directions
 
@@ -66,36 +113,10 @@ improve generalization without external data.
 
 ## Next Directions
 
-1. **Build a test-like validation set from embeddings** — highest priority.
-   The current myval proxy is fragile, especially when mytest is involved. Use
-   frozen embeddings to estimate which labeled samples resemble the Kaggle test
-   distribution, then use that subset as a better offline model-selection proxy.
-   Candidate pool should include original train, myval, and mytest images, but
-   mytest labels should be treated cautiously because supervised mytest training
-   has repeatedly hurt test F1.
-
-   Proposed implementation:
-   - Extract embeddings for `preprocess/bbox_crop/{train,myval,test}` and
-     `mytest/{meteorite,rock}` with several frozen feature families:
-     DINOv2/DINOv3, CLIP/SigLIP, and the current ConvNeXt best checkpoint
-     penultimate feature.
-   - Build the test anchor set from Kaggle test images **excluding**
-     IDs in `post_process/not-stone.txt`, because these hand-marked obvious
-     poison samples should not define the normal target distribution.
-   - Score each labeled candidate by test-likeness, e.g. top-k cosine similarity
-     to test anchors, distance to the test centroid, and/or test-neighbor ratio
-     in a kNN graph.
-   - Cluster candidate + test embeddings, identify clusters with high test
-     density, and sample `test_like_val.csv` stratified by label and cluster.
-   - Re-evaluate existing runs on this proxy first: old soup, mytest augment,
-     mytest pretrain, multi-seed ensemble, focal loss, and pseudo-label runs.
-     A useful proxy should rank the known bad mytest-heavy submissions below
-     the old soup, matching Kaggle test behavior better than myval does.
-
-   Suggested artifacts:
-   - `analysis/testlike/test_like_scores.csv`
-   - `analysis/testlike/test_like_val.csv`
-   - `analysis/testlike/cluster_summary.csv`
+1. **Use DINO test-like diagnostics for every experiment.**
+   `analysis/testlike_dino_myval_v3` is the current diagnostic set. It is not a
+   perfect final judge, but it is better than hard train-heavy test-like lists
+   and should be reported for every new checkpoint.
 
 2. **Audit and optimize `post_process/not-stone.txt`** — tied to the test-like
    validation work. The current list has only 14 forced-zero test IDs and may

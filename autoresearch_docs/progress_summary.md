@@ -59,6 +59,26 @@ Result:
 Verdict: discard for now. Even filtered mytest makes the model more
 conservative and does not improve the available diagnostics.
 
+## Required Offline Diagnostics Going Forward
+
+Do not use myval alone. For every new run, report both:
+
+- post-hoc myval F1@0.5 via `analysis/prob_dist.py`
+- frozen-DINO test-like diagnostic via `analysis/evaluate_testlike_proxy.py`
+
+Current diagnostic baseline:
+
+| run | myval_masked F1@0.5 | DINO cluster F1@0.5 | DINO top F1@0.5 |
+|---|---:|---:|---:|
+| `soup_reduced_notstone` | 0.7230 | 0.7709 | 0.8045 |
+| `mytest_strict_dino_v1` | 0.7163 | 0.7619 | 0.7892 |
+
+Reference files:
+
+- `analysis/testlike_dino_myval_v3/`
+- `analysis/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.csv`
+- `analysis/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.md`
+
 ## mytest Generalization Failure
 
 ALL attempts to incorporate mytest as training data improved myval F1 but degraded test F1:
