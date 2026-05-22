@@ -353,6 +353,91 @@ if 23 is truly negative: F1 ~= 154/215 = 0.71628
 This hypothesis is also saved as
 `post_process/not-stone_candidate_remove_23.txt`.
 
+## 2026-05-22: strict DINO-filtered mytest augmentation
+
+### Hypothesis
+
+The full mytest dataset is harmful, but a small DINO-filtered subset that is
+both test-like and label-consistent might provide useful extra supervision
+without importing the full mytest domain shift.
+
+### Data
+
+Used the strict candidates from `analysis/mytest_audit_dino_v1`:
+
+- total: 161
+- label 0: 130
+- label 1: 31
+- filter: `top10_test_frac >= 0.2`, `top10_same_label_frac >= 0.8`,
+  `conflict_score <= 2.0`, `top1_sim >= 0.75`
+
+The filtered root was materialized as symlinks under:
+
+```text
+analysis/mytest_audit_dino_v1/filtered_roots/strict
+```
+
+### Training
+
+Run:
+
+```text
+train/outputs/mytest_strict_dino_v1
+```
+
+Config matched the current soup baseline as closely as possible:
+
+- ConvNeXt Tiny
+- 288px
+- seed 42
+- cosine LR
+- bbox crop
+- myval validation
+- no Bayes correction
+- threshold search enabled
+- `--mytest-val-ratio 0.0`
+- `--mytest-sample-weight 0.5`
+
+Best internal epoch:
+
+```text
+epoch = 51
+model_select_f1 = 0.73333
+```
+
+### Evaluation
+
+Post-hoc myval evaluation:
+
+```text
+myval F1@0.5 = 0.7202
+```
+
+DINO diagnostic proxy:
+
+| run | myval_masked F1@0.5 | DINO cluster F1@0.5 | DINO top F1@0.5 |
+|---|---:|---:|---:|
+| current soup | 0.7230 | 0.7710 | 0.8045 |
+| strict mytest | 0.7163 | 0.7619 | 0.7892 |
+
+Submission behavior after current best not-stone post-process:
+
+```text
+current soup positives: 128 / 194
+strict mytest positives: 104 / 194
+diff vs current soup: 28 labels
+```
+
+Most differences are current soup positive but strict mytest negative, so this
+run is substantially more conservative.
+
+### Verdict
+
+**DISCARD / do not submit yet.** The strict filtered mytest experiment did not
+beat the current soup on myval or the DINO diagnostic proxy, and its submission
+is much more conservative. This suggests that even carefully filtered mytest
+supervision still shifts the decision boundary in a risky direction.
+
 ## 2026-05-21: Backbone Exploration
 
 - **convnext_small + mytest + split-val** (`backbone_cs_augment/soup_top3.pt`):

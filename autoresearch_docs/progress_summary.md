@@ -37,6 +37,28 @@ The F1 arithmetic implies roughly one of those four is truly positive and
 three are truly negative. The next best single-ID candidate is likely restoring
 only `23`, while keeping `18,44,72,100,133,145,162,187` forced to 0.
 
+## Latest Experiment: strict DINO-filtered mytest
+
+Run: `train/outputs/mytest_strict_dino_v1`
+
+Filtered mytest subset:
+
+- 161 images
+- 130 rock / 31 meteorite
+- selected by DINO test-neighbor proximity and label-neighbor consistency
+- trained with `--mytest-sample-weight 0.5`
+
+Result:
+
+- internal best epoch: 51
+- internal model-select F1: 0.73333
+- post-hoc myval F1@0.5: 0.7202
+- DINO cluster proxy F1@0.5: 0.7619 vs current soup 0.7710
+- processed submission positives: 104 vs current soup 128
+
+Verdict: discard for now. Even filtered mytest makes the model more
+conservative and does not improve the available diagnostics.
+
 ## mytest Generalization Failure
 
 ALL attempts to incorporate mytest as training data improved myval F1 but degraded test F1:

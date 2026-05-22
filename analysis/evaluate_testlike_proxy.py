@@ -45,6 +45,13 @@ RUNS = [
         note="same checkpoint, old aggressive not-stone post-process",
     ),
     RunSpec(
+        name="mytest_strict_dino_v1",
+        checkpoint=Path("train/outputs/mytest_strict_dino_v1/best.pt"),
+        known_test_f1=None,
+        known_myval_f1=0.7202,
+        note="original train + strict DINO-filtered mytest, sample_weight=0.5",
+    ),
+    RunSpec(
         name="mytest_split_protocol",
         checkpoint=Path("train/outputs/mytest_v1_s42/best.pt"),
         known_test_f1=0.65979,
@@ -279,14 +286,15 @@ def main() -> None:
     if prediction_rows:
         pd.concat(prediction_rows, axis=0).to_csv(args.out_dir / "proxy_eval_predictions.csv", index=False)
 
-    pivot = long_df.pivot_table(
-        index=["run", "checkpoint", "known_test_f1", "known_myval_f1_from_docs", "note"],
-        columns="dataset",
-        values=["f1_at_0_5", "best_f1", "best_threshold", "pos_pred_at_0_5", "prob_mean"],
-        aggfunc="first",
-    )
-    pivot.columns = [f"{metric}__{dataset}" for metric, dataset in pivot.columns]
-    pivot = pivot.reset_index()
+    index_cols = ["run", "checkpoint", "known_test_f1", "known_myval_f1_from_docs", "note"]
+    metric_cols = ["f1_at_0_5", "best_f1", "best_threshold", "pos_pred_at_0_5", "prob_mean"]
+    base_rows = long_df[index_cols].drop_duplicates("run").set_index("run", drop=False)
+    metric_parts = []
+    for dataset_name in datasets:
+        dataset_rows = long_df[long_df["dataset"] == dataset_name].set_index("run")
+        part = dataset_rows[metric_cols].rename(columns={col: f"{col}__{dataset_name}" for col in metric_cols})
+        metric_parts.append(part)
+    pivot = base_rows.join(metric_parts, how="left").reset_index(drop=True)
     sort_col = "known_test_f1"
     pivot = pivot.sort_values(sort_col, ascending=False)
     pivot.to_csv(args.out_dir / "proxy_eval_summary.csv", index=False)
