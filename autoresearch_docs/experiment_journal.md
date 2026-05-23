@@ -752,3 +752,46 @@ Unresolved group:
 Since leaderboard arithmetic says exactly one of 108,124,131 is likely FP, VLM evidence does not safely identify it. Do not expand the force-zero list into this group without manual review or another leaderboard split.
 
 Untested candidates such as 20/106 have DINO/SigLIP negative evidence but CLIP is positive/mixed, so they are not submission-ready.
+
+## 2026-05-23: Strategic pivot away from manual FP patching
+
+User feedback: the current gap to 0.77+ is too large to keep spending primary effort on manual not-stone/FP-zero tweaks. This is likely a model-capability or representation gap, not a patch-list problem.
+
+Decision:
+
+- Demote manual FP-zeroing to a submission-side safety tool only.
+- Keep inferred_88_177 as a useful next submission candidate, but stop expanding manual rules as the main research direction.
+- Prioritize simple strong-model experiments: frozen SigLIP/CLIP/DINO features plus logistic regression or shallow MLP, selected on Testlike V4 with submission-behavior sanity checks.
+- Prefer simple & works over complex marginal improvements.
+
+Next experiment: frozen-feature V4 probe with SigLIP/CLIP features.
+
+## 2026-05-23: Frozen SigLIP/CLIP feature probes on V4
+
+Following the strategic pivot toward model capability, added and ran a simple frozen-feature logistic probe:
+
+    python analysis/train_frozen_feature_probe.py --model-name vit_base_patch16_siglip_224 --out-dir analysis/frozen_probe_siglip_vitb16_224 --batch-size 64 --num-workers 4 --device cuda --class-weight balanced
+    python analysis/train_frozen_feature_probe.py --model-name vit_base_patch16_siglip_224 --out-dir analysis/frozen_probe_siglip_vitb16_224_noweight --batch-size 64 --num-workers 4 --device cuda --class-weight none
+    python analysis/train_frozen_feature_probe.py --model-name vit_base_patch32_clip_224 --out-dir analysis/frozen_probe_clip_vitb32_224 --batch-size 64 --num-workers 4 --device cuda --class-weight balanced
+
+The script trains logistic regression over frozen timm features, evaluates myval plus Testlike V4 cluster/top, and writes full 194-row submissions by filling test samples without bbox crops from the current best baseline.
+
+Top results:
+
+- CLIP ViT-B/32, C=3, balanced: V4 cluster=1.0000, V4 top=1.0000, myval=0.6140, test positives=110, diff vs current best=48
+- SigLIP ViT-B/16, C=10, balanced: V4 cluster=1.0000, V4 top=1.0000, myval=0.6328, test positives=103, diff vs current best=49
+- SigLIP ViT-B/16, C=10, no class weight: same V4 and behavior as balanced
+
+Conclusion:
+
+Strong frozen representations with a simple logistic head can saturate V4, confirming that model/representation capacity is a real direction. However, the V4-perfect frozen probes are much more conservative than current best (103-110 positives vs 128) and differ by 48-54 labels, so they are not submission-ready. This mirrors the earlier V4 saturation warning: V4 can be brushed high by conservative models.
+
+Next model-capability work should keep the simple-probe philosophy but add behavior constraints: calibrate thresholds toward 120-130 positives, try shallow MLP probes, or train lightweight adapters/fine-tuning. Avoid going back to manual FP-list expansion as the main line.
+
+Outputs:
+
+- analysis/train_frozen_feature_probe.py
+- analysis/frozen_probe_siglip_vitb16_224/
+- analysis/frozen_probe_siglip_vitb16_224_noweight/
+- analysis/frozen_probe_clip_vitb32_224/
+- analysis/frozen_probe_comparison/frozen_probe_comparison.md

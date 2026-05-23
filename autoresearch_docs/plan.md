@@ -160,6 +160,48 @@ Current soup baseline in the DINO diagnostic:
 7. Architecture exploration — ConvNeXt V2 at 224px (no mytest, OOM at 288px)
 
 
+
+## Strategic Pivot: Model Capability First
+
+The manual FP-zeroing work is now demoted to a submission-side safety tool. It found useful arithmetic evidence, but it is not the path to a 0.77+ jump. The large leaderboard gap is more likely a representation/model-capability gap or a better simple pipeline, not a sequence of tiny not-stone edits.
+
+Immediate priority:
+
+1. Run simple strong-backbone probes that are easy to reason about: frozen SigLIP/CLIP/DINO features plus logistic regression or a shallow MLP.
+2. Select by Testlike V4 first, but require submission behavior sanity: positive count, diff from current best, and no mytest-supervised leakage.
+3. Only after a simple model beats or matches current V4 behavior should we consider stacking/verifier complexity.
+4. Avoid spending more cycles on manual force-zero expansion unless it is submission day and the candidate is already supported by leaderboard arithmetic.
+
+Simple & works beats complex & marginal. The next experiment should be a frozen-feature V4 probe, not another hand-authored rule.
+
+
+## Cheap Model Runbook
+
+Use this when compute budget is limited. The goal is to test stronger representations with the simplest possible head before adding complexity.
+
+### Frozen-feature probes
+
+Run a frozen timm backbone, train logistic regression on original train labels only, and evaluate Testlike V4 plus full 194-row submission behavior:
+
+    python analysis/train_frozen_feature_probe.py --model-name vit_base_patch16_siglip_224 --out-dir analysis/frozen_probe_siglip_vitb16_224 --batch-size 64 --num-workers 4 --device cuda --class-weight balanced
+    python analysis/train_frozen_feature_probe.py --model-name vit_base_patch32_clip_224 --out-dir analysis/frozen_probe_clip_vitb32_224 --batch-size 64 --num-workers 4 --device cuda --class-weight balanced
+
+Recommended cheap variants:
+
+1. Try smaller/cheap timm CLIP/SigLIP backbones first: vit_base_patch32_clip_224, vit_base_patch16_siglip_224, resnet50_clip.
+2. Sweep logistic C only; do not tune augmentations or complex training until a representation has sane behavior.
+3. A candidate is interesting only if it passes V4 and keeps test behavior plausible: roughly 115-135 positives and not more than about 25-30 label diffs from current best.
+4. V4=1.0 alone is not enough. The first frozen probes reached V4=1.0 but were too conservative: 103-110 positives and 48-54 diffs.
+
+### Next simple experiments
+
+1. Threshold-calibrate frozen probes toward 120-130 positives and re-evaluate V4.
+2. Replace logistic regression with a shallow MLP over frozen features.
+3. Concatenate cheap embeddings, for example SigLIP + CLIP + DINOv2, then train logistic/MLP.
+4. Only if these simple probes look sane, move to adapters or lightweight fine-tuning.
+
+Manual FP-zero work is not the main research path. Keep it as a submission-side patch only.
+
 ## Long-Horizon / High-Variance Directions for Testlike V4
 
 Current leaderboard submission work is paused because daily submissions are exhausted. For offline exploration, optimize Testlike V4 aggressively, while treating it as a proxy rather than ground truth. Every candidate should report V4 cluster/top F1, current-submission diff count, positive count, and whether it preserves the known Kaggle arithmetic from recent submissions.

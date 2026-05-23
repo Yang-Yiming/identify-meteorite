@@ -11,3 +11,4 @@ preprocess/bbox*
 my-autoresearch
 mytest
 analysis/mytest_audit_dino_v1/filtered_roots
+analysis/frozen_probe_*/*features.npz

@@ -1,0 +1,18 @@
+{
+  "feature_cache": "analysis/frozen_probe_siglip_vitb16_224_noweight/vit_base_patch16_siglip_224_features.npz",
+  "model_name": "vit_base_patch16_siglip_224",
+  "myval_n": 332,
+  "submissions": [
+    "analysis/frozen_probe_siglip_vitb16_224_noweight/submission_C0p01.csv",
+    "analysis/frozen_probe_siglip_vitb16_224_noweight/submission_C0p03.csv",
+    "analysis/frozen_probe_siglip_vitb16_224_noweight/submission_C0p1.csv",
+    "analysis/frozen_probe_siglip_vitb16_224_noweight/submission_C0p3.csv",
+    "analysis/frozen_probe_siglip_vitb16_224_noweight/submission_C1p0.csv",
+    "analysis/frozen_probe_siglip_vitb16_224_noweight/submission_C3p0.csv",
+    "analysis/frozen_probe_siglip_vitb16_224_noweight/submission_C10p0.csv"
+  ],
+  "test_n": 176,
+  "train_n": 4780,
+  "v4_cluster_n": 160,
+  "v4_top_n": 160
+}
