@@ -700,3 +700,26 @@ Rule candidate positive counts:
 - top5_pos_zero_and_dinomlp_neg: 118 positives, too aggressive
 
 Conclusion: the verifier feature table is useful, but available weak labels are too sparse for learned training. Use it as an inspectable rule/ranking surface until more leaderboard arithmetic or manual labels arrive.
+
+## 2026-05-23: Verifier contact sheets for manual review
+
+Added visual contact sheets for the top current-positive verifier candidates and their DINO nearest neighbors.
+
+Command:
+
+    python analysis/build_verifier_contact_sheets.py --top-n 20 --neighbors-k 6 --out-dir analysis/verifier_contact_sheets
+
+Outputs:
+
+- analysis/verifier_contact_sheets/verifier_top20_neighbors.jpg
+- analysis/verifier_contact_sheets/verifier_top20_index.csv
+- analysis/verifier_contact_sheets/README.md
+
+Sheet format:
+
+- blue border: query test image
+- red border: negative train/myval neighbor
+- green border: positive train/myval neighbor
+- rows sorted by verifier_fp_score
+
+Purpose: resolve weak-label uncertainty by visual inspection, especially the unresolved group 108,124,131 and the next high-risk untested IDs 20,106,82,138,35. The index confirms that the highest-ranked candidates have overwhelmingly negative nearest-neighbor labels, but the leaderboard results show that this is not sufficient without visual/manual validation.

@@ -170,6 +170,8 @@ Update after tie-breaker report: V4-gated comparable non-baseline submissions ar
 
 Update after verifier feature table: the current weak labels are too sparse for learned verifier training. Use analysis/verifier_features/current_positive_verifier_features.csv as the shared feature surface and keep inferred_88_177 as the only clean rule candidate until more leaderboard arithmetic, manual labels, or CLIP/SigLIP consensus features are added.
 
+Update after contact sheets: use analysis/verifier_contact_sheets/verifier_top20_neighbors.jpg for manual review before expanding any FP-zero rule beyond inferred_88_177. The priority manual-review set is 108,124,131 plus 20,106,82,138,35.
+
 ### A. V4-first model search
 
 1. Re-score all saved checkpoints and soups on V4, then build a V4-selected ensemble/stacker rather than myval-selected ensemble. Avoid naive soft-voting; learn a small meta-rule from out-of-fold train predictions plus V4 candidates.
