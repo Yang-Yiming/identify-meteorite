@@ -637,3 +637,27 @@ Outputs:
 - analysis/all_checkpoints_v4_eval/all_eval_summary.csv
 
 Top-line saturated group size: 15/68 checkpoints. Current soup remains near-saturated (cluster 0.9937, top 1.0) and is not meaningfully worse under V4 than many V4-perfect but Kaggle-worse models.
+
+## 2026-05-23: V4 tie-breaker report
+
+Added and ran analysis/v4_tiebreaker_report.py to combine the all-checkpoint V4 sweep with available submission behavior and known Kaggle outcomes.
+
+Command:
+
+    python analysis/v4_tiebreaker_report.py --out-dir analysis/v4_tiebreaker
+
+Result:
+
+- 68 runs evaluated from the V4 sweep.
+- 29 runs pass the V4 gate: cluster >= 0.993 and top >= 1.0.
+- 15 runs are fully saturated at cluster/top 1.0.
+- Among comparable submission files passing the gate, the non-baseline candidates are mytest-supervised and have large behavior shifts versus current best.
+- Known bad example remains mytest_augment_v2/soup_top3.pt: V4 mean 1.0, known Kaggle F1 0.67021, 108 positives, 30 label diffs vs current best.
+
+Conclusion: V4 is useful as a gate, not as a ranking target. The next work should focus on tie-breakers and verifier features: submission diff, positive count, FP-risk arithmetic, multi-embedding agreement, and explicit penalty for mytest-supervised domain shift.
+
+Outputs:
+
+- analysis/v4_tiebreaker/v4_tiebreaker_summary.csv
+- analysis/v4_tiebreaker/v4_tiebreaker_report.md
+- analysis/v4_tiebreaker/summary.json

@@ -166,6 +166,8 @@ Current leaderboard submission work is paused because daily submissions are exha
 
 Update after all-checkpoint sweep: V4 is already saturated by many historical checkpoints, including some known Kaggle regressions. Use V4 as a gate. Tie-break with positive count, current-best diff count, FP-risk arithmetic, multi-embedding agreement, and absence of mytest-supervised domain shift.
 
+Update after tie-breaker report: V4-gated comparable non-baseline submissions are dominated by mytest-supervised variants with large behavior shifts. Prioritize a second-stage verifier on current-best positives and multi-embedding FP consensus over any further mytest-supervised model selection.
+
 ### A. V4-first model search
 
 1. Re-score all saved checkpoints and soups on V4, then build a V4-selected ensemble/stacker rather than myval-selected ensemble. Avoid naive soft-voting; learn a small meta-rule from out-of-fold train predictions plus V4 candidates.

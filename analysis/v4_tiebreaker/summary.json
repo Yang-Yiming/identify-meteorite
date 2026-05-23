@@ -1,0 +1,9 @@
+{
+  "baseline_submission": "train/outputs/myval_v13_hi288_seed42_soup/submission_processed_best_notstone.csv",
+  "cluster_gate": 0.993,
+  "runs_evaluated": 68,
+  "runs_passing_gate": 29,
+  "runs_saturated": 15,
+  "top_gate": 1.0,
+  "v4_summary": "analysis/all_checkpoints_v4_eval/all_eval_summary.csv"
+}
