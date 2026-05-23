@@ -172,6 +172,8 @@ Update after verifier feature table: the current weak labels are too sparse for 
 
 Update after contact sheets: use analysis/verifier_contact_sheets/verifier_top20_neighbors.jpg for manual review before expanding any FP-zero rule beyond inferred_88_177. The priority manual-review set is 108,124,131 plus 20,106,82,138,35.
 
+Update after SigLIP/CLIP audit: DINO + SigLIP + CLIP agree that only 88 and 177 are strong negative candidates among current high-risk positives. VLM evidence makes 124 less attractive to zero and leaves 108/131 unresolved. Do not expand beyond inferred_88_177 until manual review or another leaderboard split is available.
+
 ### A. V4-first model search
 
 1. Re-score all saved checkpoints and soups on V4, then build a V4-selected ensemble/stacker rather than myval-selected ensemble. Avoid naive soft-voting; learn a small meta-rule from out-of-fold train predictions plus V4 candidates.

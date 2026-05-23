@@ -723,3 +723,32 @@ Sheet format:
 - rows sorted by verifier_fp_score
 
 Purpose: resolve weak-label uncertainty by visual inspection, especially the unresolved group 108,124,131 and the next high-risk untested IDs 20,106,82,138,35. The index confirms that the highest-ranked candidates have overwhelmingly negative nearest-neighbor labels, but the leaderboard results show that this is not sufficient without visual/manual validation.
+
+## 2026-05-23: SigLIP/CLIP VLM neighbor consensus
+
+User allowed network downloads, so two visual-language embedding audits were run for the top verifier candidates:
+
+    python analysis/audit_vlm_neighbors.py --model-name vit_base_patch16_siglip_224 --top-n 40 --top-k 20 --batch-size 64 --num-workers 4 --device cuda --out-dir analysis/vlm_neighbor_audit_siglip_vitb16_224
+    python analysis/audit_vlm_neighbors.py --model-name vit_base_patch32_clip_224 --top-n 40 --top-k 20 --batch-size 64 --num-workers 4 --device cuda --out-dir analysis/vlm_neighbor_audit_clip_vitb32_224
+    python analysis/vlm_consensus_report.py --out-dir analysis/vlm_consensus
+
+Outputs:
+
+- analysis/vlm_neighbor_audit_siglip_vitb16_224/
+- analysis/vlm_neighbor_audit_clip_vitb32_224/
+- analysis/vlm_consensus/vlm_consensus_report.md
+- analysis/vlm_consensus/vlm_consensus_features.csv
+
+Key result:
+
+DINO + SigLIP + CLIP three-embedding strong-negative candidates are only 88 and 177. These are also the leaderboard-arithmetic inferred FPs, so the next submission candidate remains current best plus zero 88,177 only.
+
+Unresolved group:
+
+- 131: DINO/SigLIP strongly negative, CLIP mixed (top5 pos frac 0.4)
+- 108: DINO/SigLIP strongly negative, CLIP mixed (top5 pos frac 0.4)
+- 124: DINO negative, SigLIP mixed, CLIP positive (top5 pos frac 0.8)
+
+Since leaderboard arithmetic says exactly one of 108,124,131 is likely FP, VLM evidence does not safely identify it. Do not expand the force-zero list into this group without manual review or another leaderboard split.
+
+Untested candidates such as 20/106 have DINO/SigLIP negative evidence but CLIP is positive/mixed, so they are not submission-ready.

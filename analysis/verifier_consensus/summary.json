@@ -1,0 +1,12 @@
+{
+  "candidate_submissions": {
+    "A": "analysis/verifier_consensus/candidate_submissions/submission_consensus_A.csv",
+    "A_B": "analysis/verifier_consensus/candidate_submissions/submission_consensus_A_B.csv"
+  },
+  "rows": 128,
+  "tier_counts": {
+    "A_lb_inferred": 2,
+    "C_unresolved_one_of_three": 3,
+    "E_low_priority": 123
+  }
+}

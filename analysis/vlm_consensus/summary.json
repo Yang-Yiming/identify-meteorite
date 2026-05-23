@@ -1,0 +1,6 @@
+{
+  "clip": "analysis/vlm_neighbor_audit_clip_vitb32_224/vlm_neighbor_summary.csv",
+  "rows": 128,
+  "siglip": "analysis/vlm_neighbor_audit_siglip_vitb16_224/vlm_neighbor_summary.csv",
+  "strong_negative_count": 2
+}

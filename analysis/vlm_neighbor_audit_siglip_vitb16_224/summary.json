@@ -1,0 +1,7 @@
+{
+  "model_name": "vit_base_patch16_siglip_224",
+  "query_count": 40,
+  "ref_count": 5112,
+  "top_k": 20,
+  "top_n": 40
+}
