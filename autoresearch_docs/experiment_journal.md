@@ -516,18 +516,29 @@ V3本身偏向mytest模型(因myval与mytest相似), 需用V4作离线诊断。
 |-----|-------------|-----------------|-------------|---------|
 | dinov2_mlp (lr=1e-3, ep=100) | **0.7530** | — | — | **BEST myval** (但未保存模型) |
 | dinov2_mlp_v2 (lr=1e-3, ep=80) | **0.7416** | 0.7735 | 0.8068 | **KEEP** — 全面超过soup |
-| dinov2_mlp_full (lr=1e-3, ep=80, 194 test) | **0.7485** | — | — | **KEEP** — 修复194行, 117 positives |
+| dinov2_mlp_full (lr=1e-3, ep=80, 194 test) | **0.7485** | — | — | **DISCARD** — Kaggle test=**0.70935** |
 
-**vs Soup baseline**: myval +0.0165, cluster +0.0026, top +0.0023
+**vs Soup baseline**: myval +0.0234, test -0.010 → **myval又一次误导！**
 
 ### Key Insight
 
-DINOv2预训练特征 (在LVD-142M上自监督学习) 的表示质量远超ImageNet-1k预训练。即使只用简单MLP分类器, 也能超过端到端finetune的ConvNeXt Tiny。
+DINOv2预训练特征+MLP在myval上显著超过soup,但在Kaggle test上退化。这再次证实myval不可靠——myval提升 ≠ test提升。
+
+### 重大决策: 放弃myval, 全面转向Testlike V4
+
+**myval已多次被证实为不可靠的离线代理指标**:
+| 实验 | myval Δ | test Δ | myval误导 |
+|------|---------|--------|----------|
+| dinov2 mlp | +0.0234 | -0.0103 | ❌ |
+| mytest augment soup | +0.0437 | -0.0284 | ❌ |
+| mytest pretrain→finetune | +0.0107 | -0.1464 | ❌ |
+| ensemble 42+123 | +0.0032 | -0.0389 | ❌ |
+
+**从此使用 Testlike V4 (train candidates, rank corr=+0.97) 作为唯一离线判决指标。**
 
 ### Next Directions
 
-1. **DINOv2 MLP ensemble** — 多epoch的MLP权重平均(model soup)
-2. **更大的DINOv2模型** — `vit_large_patch14_dinov2` (但518px可能显存不足)
-3. **DINOv2 MLP + ConvNeXt Soup ensemble** — 已测试, 反而降低分数(-0.007), 因模型相关度过高
-4. **pseudo-labeling on test** — 用DINOv2 MLP的高置信度预测作伪标签重训ConvNeXt
-5. **提交 DINOv2 MLP 到 Kaggle** — 当前最有希望的配置
+1. **用V4评估所有checkpoint** — 建立新的baseline排序
+2. **构建更好的testlike版本** — CLIP/SigLIP特征空间
+3. **自监督domain adaptation** — 在全部stone图像上做无监督预训练
+4. **数据清洗** — 基于V4的test-likeness分数清理低质量训练样本

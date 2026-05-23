@@ -12,11 +12,15 @@ data is involved.** Adding mytest as training data inflates myval F1
 (+0.02~+0.04) but degrades test F1 (-0.03~-0.15). See "mytest Generalization
 Failure" below.
 
-**CRITICAL UPDATE (2026-05-22): use the DINO test-like diagnostic for every
-new run.** The hard test-like val lists are not a final judge, but they are the
-best available target-distribution diagnostic. Any new checkpoint should be
-compared against the current soup baseline in
-`analysis/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.csv`.
+**CRITICAL UPDATE (2026-05-23): ABANDON myval as offline proxy. Use Testlike V4
+(train candidates, DINOv2 embeddings, rank corr=+0.97) for ALL offline
+judgment.** myval has been repeatedly shown to mislead — improvements in myval
+frequently correspond to test regressions (dinov2 mlp: myval +0.023, test -0.010;
+mytest augment: myval +0.044, test -0.028; etc).
+
+The V4 diagnostic dataset is at:
+`analysis/testlike_dino_train_v4/`
+Evaluation script: `analysis/evaluate_testlike_proxy.py` (now defaults to V4).
 
 ## Current State
 

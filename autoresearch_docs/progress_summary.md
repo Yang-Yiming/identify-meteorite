@@ -61,22 +61,35 @@ conservative and does not improve the available diagnostics.
 
 ## Required Offline Diagnostics Going Forward
 
-Do not use myval alone. For every new run, report both:
+**myval ABANDONED as unreliable proxy.** Use Testlike V4 only:
 
-- post-hoc myval F1@0.5 via `analysis/prob_dist.py`
-- frozen-DINO test-like diagnostic via `analysis/evaluate_testlike_proxy.py`
+```bash
+python analysis/evaluate_testlike_proxy.py \
+  --manifest analysis/testlike_dino_train_v4/manifest.csv \
+  --cluster-val analysis/testlike_dino_train_v4/test_like_val_cluster.csv \
+  --top-val analysis/testlike_dino_train_v4/test_like_val_top.csv \
+  --device cuda --batch-size 128
+```
 
-Current diagnostic baseline:
+Current V4 diagnostic baseline:
 
-| run | myval_masked F1@0.5 | DINO cluster F1@0.5 | DINO top F1@0.5 |
-|---|---:|---:|---:|
-| `soup_reduced_notstone` | 0.7230 | 0.7709 | 0.8045 |
-| `mytest_strict_dino_v1` | 0.7163 | 0.7619 | 0.7892 |
+| run | V4 cluster F1@0.5 | V4 top F1@0.5 | test F1 |
+|-----|-----|-----|-----|
+| `soup_reduced_notstone` | 0.9937 | 1.0000 | **0.71962** |
+| `mytest_augment_soup` | 1.0000 | 1.0000 | 0.67021 |
+| `mytest_pretrain_finetune` | 0.8725 | 0.9487 | 0.55214 |
 
 Reference files:
+- `analysis/testlike_dino_train_v4/` — V4 dataset
+- `analysis/testlike_v4_eval/v4_eval_results.csv` — evaluation results
 
-- `analysis/testlike_dino_myval_v3/`
-- `analysis/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.csv`
+### myval 不可靠性证据
+
+| 实验 | myval Δ | test Δ | 误导? |
+|------|---------|--------|--------|
+| dinov2 mlp | +0.0234 | -0.0103 | ❌ 方向反转 |
+| mytest augment soup | +0.0437 | -0.0284 | ❌ 方向反转 |
+| mytest pretrain→finetune | +0.0107 | -0.1464 | ❌ 严重反转 |
 - `analysis/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.md`
 
 ## mytest Generalization Failure

@@ -79,6 +79,13 @@ RUNS = [
         known_myval_f1=0.7446,
         note="mytest merged, internal split validation, top-3 soup",
     ),
+    RunSpec(
+        name="cnv2_tiny",
+        checkpoint=Path("train/outputs/cnv2_tiny_288_s42/best.pt"),
+        known_test_f1=None,
+        known_myval_f1=0.6736,
+        note="ConvNeXt V2 tiny, worse than soup",
+    ),
 ]
 
 
@@ -227,11 +234,11 @@ def markdown_table(df: pd.DataFrame, floatfmt: str = ".4f") -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manifest", type=Path, default=Path("analysis/testlike/manifest.csv"))
-    parser.add_argument("--cluster-val", type=Path, default=Path("analysis/testlike/test_like_val_cluster.csv"))
-    parser.add_argument("--top-val", type=Path, default=Path("analysis/testlike/test_like_val_top.csv"))
-    parser.add_argument("--dataset-prefix", type=str, default="v1")
-    parser.add_argument("--out-dir", type=Path, default=Path("analysis/testlike_eval"))
+    parser.add_argument("--manifest", type=Path, default=Path("analysis/testlike_dino_train_v4/manifest.csv"))
+    parser.add_argument("--cluster-val", type=Path, default=Path("analysis/testlike_dino_train_v4/test_like_val_cluster.csv"))
+    parser.add_argument("--top-val", type=Path, default=Path("analysis/testlike_dino_train_v4/test_like_val_top.csv"))
+    parser.add_argument("--dataset-prefix", type=str, default="dino_v4")
+    parser.add_argument("--out-dir", type=Path, default=Path("analysis/testlike_v4_eval"))
     parser.add_argument("--batch-size", type=int, default=96)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")

@@ -1,0 +1,10 @@
+dataset,metric,spearman_like_rank_corr
+myval_masked,f1_at_0_5,-0.5797710356524484
+myval_masked,best_f1,-0.46381682852195877
+myval_masked,prob_mean,0.8116794499134279
+testlike_cluster_dino_v4,f1_at_0_5,0.7944613465542746
+testlike_cluster_dino_v4,best_f1,0.6982532518267538
+testlike_cluster_dino_v4,prob_mean,-0.057977103565244846
+testlike_top_dino_v4,f1_at_0_5,0.9411239481143202
+testlike_top_dino_v4,best_f1,0.8451542547285166
+testlike_top_dino_v4,prob_mean,-0.057977103565244846
