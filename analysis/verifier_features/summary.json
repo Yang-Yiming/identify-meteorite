@@ -1,0 +1,15 @@
+{
+  "candidate_submissions": {
+    "alt_majority_negative_high_risk": "analysis/verifier_features/candidate_submissions/submission_alt_majority_negative_high_risk.csv",
+    "dino_risk_top2": "analysis/verifier_features/candidate_submissions/submission_dino_risk_top2.csv",
+    "dino_risk_top3": "analysis/verifier_features/candidate_submissions/submission_dino_risk_top3.csv",
+    "dino_risk_top5": "analysis/verifier_features/candidate_submissions/submission_dino_risk_top5.csv",
+    "inferred_88_177": "analysis/verifier_features/candidate_submissions/submission_inferred_88_177.csv",
+    "strict_consensus_neg": "analysis/verifier_features/candidate_submissions/submission_strict_consensus_neg.csv",
+    "top5_pos_zero_and_dinomlp_neg": "analysis/verifier_features/candidate_submissions/submission_top5_pos_zero_and_dinomlp_neg.csv"
+  },
+  "current_positive_count": 128,
+  "feature_output": "analysis/verifier_features/current_positive_verifier_features.csv",
+  "report": "analysis/verifier_features/verifier_feature_report.md",
+  "rules_output": "analysis/verifier_features/verifier_rule_candidates.csv"
+}

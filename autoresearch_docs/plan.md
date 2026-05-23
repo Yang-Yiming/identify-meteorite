@@ -168,6 +168,8 @@ Update after all-checkpoint sweep: V4 is already saturated by many historical ch
 
 Update after tie-breaker report: V4-gated comparable non-baseline submissions are dominated by mytest-supervised variants with large behavior shifts. Prioritize a second-stage verifier on current-best positives and multi-embedding FP consensus over any further mytest-supervised model selection.
 
+Update after verifier feature table: the current weak labels are too sparse for learned verifier training. Use analysis/verifier_features/current_positive_verifier_features.csv as the shared feature surface and keep inferred_88_177 as the only clean rule candidate until more leaderboard arithmetic, manual labels, or CLIP/SigLIP consensus features are added.
+
 ### A. V4-first model search
 
 1. Re-score all saved checkpoints and soups on V4, then build a V4-selected ensemble/stacker rather than myval-selected ensemble. Avoid naive soft-voting; learn a small meta-rule from out-of-fold train predictions plus V4 candidates.

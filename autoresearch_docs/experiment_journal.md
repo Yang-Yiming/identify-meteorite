@@ -661,3 +661,42 @@ Outputs:
 - analysis/v4_tiebreaker/v4_tiebreaker_summary.csv
 - analysis/v4_tiebreaker/v4_tiebreaker_report.md
 - analysis/v4_tiebreaker/summary.json
+
+## 2026-05-23: Current-positive verifier feature table
+
+Built the first second-stage verifier artifact for current-best positive test samples.
+
+Command:
+
+    python analysis/build_verifier_features.py --out-dir analysis/verifier_features
+
+Inputs combined:
+
+- current best processed submission and soup probabilities
+- DINO FP-risk audit features
+- Testlike V4 test-likeness and cluster metadata
+- alternate submission labels from DINO MLP, mytest variants, ensemble, splitval, and old bbox model
+- leaderboard-arithmetic weak labels
+
+Outputs:
+
+- analysis/verifier_features/current_positive_verifier_features.csv
+- analysis/verifier_features/verifier_rule_candidates.csv
+- analysis/verifier_features/verifier_feature_report.md
+- analysis/verifier_features/candidate_submissions/
+
+Key result:
+
+The only clean rule under current evidence is inferred_88_177, selecting IDs 88 and 177 only. It hits both currently inferred FPs and avoids the unresolved group 108,124,131. It produces 126 positives. Broader rules select 5-10 IDs but reintroduce the unresolved one-of-three group and should not be prioritized for the next leaderboard submission.
+
+Rule candidate positive counts:
+
+- inferred_88_177: 126 positives
+- dino_risk_top2: 126 positives, but selects only unresolved 108/131
+- dino_risk_top3: 125 positives, includes unresolved group
+- dino_risk_top5: 123 positives, known top5 failed at 0.71770
+- alt_majority_negative_high_risk: 121 positives, includes unresolved group and extra untested IDs
+- strict_consensus_neg: 121 positives, includes unresolved group and extra untested IDs
+- top5_pos_zero_and_dinomlp_neg: 118 positives, too aggressive
+
+Conclusion: the verifier feature table is useful, but available weak labels are too sparse for learned training. Use it as an inspectable rule/ranking surface until more leaderboard arithmetic or manual labels arrive.
