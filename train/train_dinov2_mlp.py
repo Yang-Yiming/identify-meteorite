@@ -92,6 +92,7 @@ def main():
     parser.add_argument("--myval-crop-dir", type=Path, default=Path("preprocess/bbox_crop/myval"))
     parser.add_argument("--myval-labels-csv", type=Path, default=Path("data/myval/labels.csv"))
     parser.add_argument("--test-crop-dir", type=Path, default=Path("preprocess/bbox_crop/test"))
+    parser.add_argument("--test-raw-dir", type=Path, default=Path("data/test_images/test_images"))
     parser.add_argument("--output-dir", type=Path, default=Path("train/outputs/dinov2_mlp"))
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -171,9 +172,25 @@ def main():
                     found = True
                     break
 
-    # Test images
-    test_paths = sorted([str(p) for p in args.test_crop_dir.iterdir() if p.is_file() and p.suffix == ".png"])
-    test_ids = [Path(p).name.replace("_mask_000", "") for p in test_paths]
+    # Test images - get all 194, prefer bbox_crop, fallback to raw
+    # Read expected test IDs from soup submission
+    soup_sub = pd.read_csv("train/outputs/myval_v13_hi288_seed42_soup/submission_raw.csv")
+    expected_ids = soup_sub["id"].tolist()
+    test_paths = []
+    test_ids = []
+    for image_id in expected_ids:
+        stem = Path(image_id).stem  # e.g. "000001"
+        # Try bbox_crop first
+        crop_path = args.test_crop_dir / f"{stem}_mask_000.png"
+        if crop_path.is_file():
+            test_paths.append(str(crop_path))
+            test_ids.append(image_id)
+        else:
+            # Fallback to raw image
+            raw_path = args.test_raw_dir / image_id
+            if raw_path.is_file():
+                test_paths.append(str(raw_path))
+                test_ids.append(image_id)
 
     print(f"Train: {len(train_paths)} | Myval: {len(myval_paths)} | Test: {len(test_paths)}")
 

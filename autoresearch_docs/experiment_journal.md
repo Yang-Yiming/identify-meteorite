@@ -516,7 +516,7 @@ V3本身偏向mytest模型(因myval与mytest相似), 需用V4作离线诊断。
 |-----|-------------|-----------------|-------------|---------|
 | dinov2_mlp (lr=1e-3, ep=100) | **0.7530** | — | — | **BEST myval** (但未保存模型) |
 | dinov2_mlp_v2 (lr=1e-3, ep=80) | **0.7416** | 0.7735 | 0.8068 | **KEEP** — 全面超过soup |
-| dinov2_mlp_v3 (lr=1e-3, ep=200) | 0.7365 | — | — | 200 epochs无进一步改善 |
+| dinov2_mlp_full (lr=1e-3, ep=80, 194 test) | **0.7485** | — | — | **KEEP** — 修复194行, 117 positives |
 
 **vs Soup baseline**: myval +0.0165, cluster +0.0026, top +0.0023
 
