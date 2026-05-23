@@ -620,3 +620,20 @@ F1 arithmetic from current best (TP=77, denominator=214): zeroing 3 positives an
 Combined with the top5 result (88,108,124,131,177 -> 0.71770 ~= 150/209), the top5 set likely contains exactly **2 true positives and 3 false positives**. Therefore the two omitted IDs, 88 and 177, are the strongest inferred false positives.
 
 Next candidate: restore 108,124,131; force-zero only 88,177 in addition to the current best not-stone list. Expected score if exact: 154/212 = 0.72642.
+
+## 2026-05-23: All-checkpoint Testlike V4 sweep
+
+Ran all existing best/soup checkpoints on Testlike V4:
+
+    python analysis/evaluate_all_checkpoints.py --manifest analysis/testlike_dino_train_v4/manifest.csv --cluster-val analysis/testlike_dino_train_v4/test_like_val_cluster.csv --top-val analysis/testlike_dino_train_v4/test_like_val_top.csv --out-dir analysis/all_checkpoints_v4_eval --batch-size 128 --num-workers 4 --device cuda
+
+Result: V4 is now saturated. 15/68 evaluated checkpoints get F1@0.5 = 1.0 on both V4 cluster and V4 top. This full-score group includes models known to generalize badly on Kaggle, for example mytest_augment_v2/soup_top3.pt (known test F1 0.67021). Therefore V4 should be treated as a gate, not as a sufficient ranking objective.
+
+Useful implication: future experiments should require V4 near-perfect, but tie-break by hidden-test behavior proxies: positive count, diff from current best, FP-risk arithmetic, multi-embedding agreement, and avoidance of mytest-supervised domain shift.
+
+Outputs:
+
+- analysis/all_checkpoints_v4_eval/all_eval_long.csv
+- analysis/all_checkpoints_v4_eval/all_eval_summary.csv
+
+Top-line saturated group size: 15/68 checkpoints. Current soup remains near-saturated (cluster 0.9937, top 1.0) and is not meaningfully worse under V4 than many V4-perfect but Kaggle-worse models.

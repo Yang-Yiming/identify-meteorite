@@ -164,6 +164,8 @@ Current soup baseline in the DINO diagnostic:
 
 Current leaderboard submission work is paused because daily submissions are exhausted. For offline exploration, optimize Testlike V4 aggressively, while treating it as a proxy rather than ground truth. Every candidate should report V4 cluster/top F1, current-submission diff count, positive count, and whether it preserves the known Kaggle arithmetic from recent submissions.
 
+Update after all-checkpoint sweep: V4 is already saturated by many historical checkpoints, including some known Kaggle regressions. Use V4 as a gate. Tie-break with positive count, current-best diff count, FP-risk arithmetic, multi-embedding agreement, and absence of mytest-supervised domain shift.
+
 ### A. V4-first model search
 
 1. Re-score all saved checkpoints and soups on V4, then build a V4-selected ensemble/stacker rather than myval-selected ensemble. Avoid naive soft-voting; learn a small meta-rule from out-of-fold train predictions plus V4 candidates.
