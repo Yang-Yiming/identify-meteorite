@@ -1,0 +1,15 @@
+{
+  "candidate_files": {
+    "top10": "analysis/test_fp_risk_audit_dino_nomtest/not-stone_plus_top10_fp_risk.txt",
+    "top15": "analysis/test_fp_risk_audit_dino_nomtest/not-stone_plus_top15_fp_risk.txt",
+    "top20": "analysis/test_fp_risk_audit_dino_nomtest/not-stone_plus_top20_fp_risk.txt",
+    "top25": "analysis/test_fp_risk_audit_dino_nomtest/not-stone_plus_top25_fp_risk.txt",
+    "top5": "analysis/test_fp_risk_audit_dino_nomtest/not-stone_plus_top5_fp_risk.txt"
+  },
+  "dino_model": "vit_base_patch14_dinov2",
+  "feature_backend": "dino_timm",
+  "feature_rows": 5288,
+  "ref_rows": 5112,
+  "test_rows_with_images": 176,
+  "top_k": 20
+}

@@ -158,3 +158,36 @@ Current soup baseline in the DINO diagnostic:
 6. **CLIP/SigLIP frozen-feature baselines and stacking** — use large pretrained
    visual embeddings with logistic regression, kNN, SVM, or shallow stacking.
 7. Architecture exploration — ConvNeXt V2 at 224px (no mytest, OOM at 288px)
+
+
+## Long-Horizon / High-Variance Directions for Testlike V4
+
+Current leaderboard submission work is paused because daily submissions are exhausted. For offline exploration, optimize Testlike V4 aggressively, while treating it as a proxy rather than ground truth. Every candidate should report V4 cluster/top F1, current-submission diff count, positive count, and whether it preserves the known Kaggle arithmetic from recent submissions.
+
+### A. V4-first model search
+
+1. Re-score all saved checkpoints and soups on V4, then build a V4-selected ensemble/stacker rather than myval-selected ensemble. Avoid naive soft-voting; learn a small meta-rule from out-of-fold train predictions plus V4 candidates.
+2. Train a second-stage verifier only on current-soup positive candidates. Objective: reduce FP among high-recall positives. Candidate features: soup prob, DINO MLP label, DINO kNN label ratios, CLIP/SigLIP scores, crop/mask metadata, V4 cluster/test-likeness.
+3. Optimize threshold and per-cluster thresholds on V4, but constrain total positive count near the inferred hidden-test range. Record positive-count sensitivity.
+
+### B. Multi-embedding FP/TP inference
+
+1. Add SigLIP/CLIP embeddings to the DINO FP-risk audit. Use them mainly as semantic anomaly detectors, not as direct classifiers.
+2. Build consensus kNN evidence across DINOv2, DINOv3, SigLIP, ConvNeXt penultimate features, and simple image statistics. Rank only samples where multiple embedding families agree.
+3. Use pairwise submission arithmetic to infer labels for small candidate groups. Recent results imply 88 and 177 are strong FP candidates, while exactly one of 108,124,131 is likely FP.
+
+### C. Self-supervised / domain adaptation
+
+1. Continue DINOv2 or MAE-style SSL on all unlabeled stone crops: train + myval + test + mytest images, but never use mytest labels. Then train linear/MLP probes and small adapters on original train labels only.
+2. Try parameter-efficient ViT adaptation: freeze backbone, train LoRA/adapters/LayerNorm affine on train labels, optionally with consistency loss on unlabeled test crops.
+3. Try TENT-style test-time adaptation with only normalization/adapters updated. Reject candidates that increase positive count or collapse confidence.
+
+### D. Data cleaning guided by V4
+
+1. Identify train samples least similar to test distribution under V4/DINO and downweight or exclude them. Evaluate whether a smaller, more test-like supervised set improves V4.
+2. Hard-negative mine from original train only: train negatives that are nearest to current test positives, plus high-probability false positives under OOF prediction.
+3. Audit duplicated or contradictory train/myval images in embedding space. Remove or downweight suspicious labels before training verifier models.
+
+### E. Submission policy after daily reset
+
+The next most informative candidate is current best plus force-zero 88,177 only: analysis/test_fp_risk_audit_dino_nomtest/submission_inferred_zero_88_177.csv. If the arithmetic inference is exact, expected F1 is about 0.72642. Do not submit larger DINO FP-risk batches until this is tested.
