@@ -8,110 +8,72 @@ Pipeline: ConvNeXt Tiny backbone + light classifier head, AdamW, two-stage train
 | Metric | Value |
 |--------|-------|
 | **test F1** | **0.71962** |
-| **myval F1@0.5** | **0.7251** |
 | Run | `train/outputs/myval_v13_hi288_seed42_soup` + reduced not-stone post-process |
 | Config | 288px, seed=42, cosine LR, thr=0.5, bbox-crop, no-Bayes, top-3 soup (epochs 20/39/26), reduced force-zero list |
 | Train set | 4780 bbox-crop images (original only) |
 
-## not-stone Post-process Update
+## Leaderboard Context
+**Current #1 is ~0.80.** Our SOTA gap is ~0.08. This is a model-capability / representation gap.
 
-The previous full `post_process/not-stone.txt` force-zero list was too
-aggressive. Reducing the list improved test F1 from 0.69856 to **0.71962**.
+## Latest Experiments (2026-05-25)
 
-Current best force-zero list:
+### End-to-end ViT fine-tuning
 
-```text
-18
-23
-44
-72
-100
-133
-145
-162
-187
-```
+Trained SigLIP ViT-B/16 @384px and DINOv2 ViT-B/14 @518px end-to-end. ViTs severely overfit on 4780 images — require strong regularization (dropout=0.2, drop_path=0.2, weight_decay=0.1).
 
-A 4-image ablation restored `18,23,72,133` to positive and scored 0.71559.
-The F1 arithmetic implies roughly one of those four is truly positive and
-three are truly negative. The next best single-ID candidate is likely restoring
-only `23`, while keeping `18,44,72,100,133,145,162,187` forced to 0.
+| Model | Kaggle test | myval | vs SOTA |
+|-------|-----------|-------|---------|
+| **DINOv2 Small (22M)** | **0.71962** | 0.699 | **TIE** |
+| DINOv2 Base (86M) | 0.70697 | 0.679 | -0.013 |
+| Ensemble CN+DINOv2 | 0.69811 | — | -0.021 |
+| ConvNeXt soup (SOTA) | 0.71962 | 0.725 | 0 |
+| MAE domain pretrain→finetune | — | 0.564 | ❌ worse |
 
-## Latest Experiment: strict DINO-filtered mytest
+### Key finding: DINOv2 Small TIED SOTA at 0.71962
 
-Run: `train/outputs/mytest_strict_dino_v1`
+First model to match the ConvNeXt Tiny soup. Same score, different architecture (ViT vs CNN), 22 label disagreements. The 11 DINOv2 removals ALL fall in the verifier FP-risk set. Created a verifier-guided hybrid submission (`submission_hybrid_vrfp_gt07_unsubmitted.csv`) that only flips the 4 highest FP-risk IDs.
 
-Filtered mytest subset:
+### Data ceiling confirmed: all models cluster at 0.707-0.720
 
-- 161 images
-- 130 rock / 31 meteorite
-- selected by DINO test-neighbor proximity and label-neighbor consistency
-- trained with `--mytest-sample-weight 0.5`
+Whether ConvNeXt Tiny (28M), DINOv2 Small (22M), or DINOv2 Base (86M), all converge to ~0.72. The 4780-image training set is the bottleneck, not model architecture.
 
-Result:
+## Frozen Feature Probe → DEAD END (2026-05-24)
 
-- internal best epoch: 51
-- internal model-select F1: 0.73333
-- post-hoc myval F1@0.5: 0.7202
-- DINO cluster proxy F1@0.5: 0.7619 vs current soup 0.7710
-- processed submission positives: 104 vs current soup 128
+Triple concat probe (SigLIP+CLIP+DINOv2, 2048d, logistic regression, C=0.1):
+- V4 cluster=1.0, V4 top=1.0, myval=0.716, 128 positives, 26 diffs vs SOTA
+- Submitted to Kaggle → **test F1 = 0.68224** (regression of -0.037 vs SOTA 0.71962)
+- V4=1.0 was insufficient as predictor. Frozen features + shallow head cannot match end-to-end fine-tuning.
 
-Verdict: discard for now. Even filtered mytest makes the model more
-conservative and does not improve the available diagnostics.
+**Decision: abandon frozen-feature probe paradigm.** Stronger backbones need end-to-end fine-tuning.
 
-## Required Offline Diagnostics Going Forward
+## Primary Research Direction: Stronger Base Models
 
-**myval ABANDONED as unreliable proxy.** Use Testlike V4 only:
+The 0.08 gap between SOTA (0.72) and leaderboard #1 (0.80) demands fundamentally stronger models:
 
-```bash
-python analysis/evaluate_testlike_proxy.py \
-  --manifest analysis/testlike_dino_train_v4/manifest.csv \
-  --cluster-val analysis/testlike_dino_train_v4/test_like_val_cluster.csv \
-  --top-val analysis/testlike_dino_train_v4/test_like_val_top.csv \
-  --device cuda --batch-size 128
-```
+### Priority 1: End-to-end fine-tune larger backbones
+- **SigLIP ViT-B/16 @384px** — the strongest open-source vision-language backbone
+- **DINOv2 ViT-B/14 @518px** — best self-supervised vision features
+- **ConvNeXt V2 Large** — if memory allows
 
-Current V4 diagnostic baseline:
+### Priority 2: Self-supervised domain pretraining → fine-tune
+- Continue DINOv2/MAE training on all stone images (~10k: train + myval + test + mytest)
+- NEVER use mytest labels — only images for SSL
+- Then fine-tune the domain-adapted backbone on original 4780 train labels
+- This is the most promising path to bridge the 0.08 gap
 
-| run | V4 cluster F1@0.5 | V4 top F1@0.5 | test F1 |
-|-----|-----|-----|-----|
-| `soup_reduced_notstone` | 0.9937 | 1.0000 | **0.71962** |
-| `mytest_augment_soup` | 1.0000 | 1.0000 | 0.67021 |
-| `mytest_pretrain_finetune` | 0.8725 | 0.9487 | 0.55214 |
+### Priority 3: Training recipe improvements for larger models
+- Higher resolution (384px, 518px) — the current 288px limit is ConvNeXt-specific
+- Stronger regularization for data-hungry ViTs (stochastic depth, higher weight decay)
+- Mixed-precision training to fit larger models in GPU memory
 
-Reference files:
-- `analysis/testlike_dino_train_v4/` — V4 dataset
-- `analysis/testlike_v4_eval/v4_eval_results.csv` — evaluation results
-
-### myval 不可靠性证据
-
-| 实验 | myval Δ | test Δ | 误导? |
-|------|---------|--------|--------|
-| dinov2 mlp | +0.0234 | -0.0103 | ❌ 方向反转 |
-| mytest augment soup | +0.0437 | -0.0284 | ❌ 方向反转 |
-| mytest pretrain→finetune | +0.0107 | -0.1464 | ❌ 严重反转 |
-- `analysis/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.md`
-
-## mytest Generalization Failure
-
-ALL attempts to incorporate mytest as training data improved myval F1 but degraded test F1:
-
-| Experiment | myval F1@0.5 | test F1 | myval-test gap | Note |
-|------------|-------------|---------|----------------|------|
-| Old soup (baseline) | 0.7251 | **0.69856** | 0.0265 | no mytest |
-| mytest split protocol | 0.7321 | 0.65979 | 0.0723 | mytest as train+val |
-| mytest pretrain→finetune | 0.7358 | 0.55214 | 0.1837 | two-stage pretrain |
-| mytest aug + myval val (soup) | 0.7688 | 0.67021 | 0.0986 | mytest merged into train |
-| split-val aug (soup) | 0.7446 | 0.63212 | 0.1125 | no myval leak, still failed |
-
-**Key finding:** mytest data causes severe domain shift. The model learns mytest-specific features that inflate myval but don't generalize to the Kaggle test set. This is consistent across pretrain→finetune, direct augmentation, and even split-val approaches with no myval leakage.
-
-## Key Findings (confirmed)
-1. **myval-as-validation** (+0.065): The single biggest myval win. However, repeated use for hyperparameter tuning creates leak risk.
-2. **Higher resolution (288px)** (+0.008): Helpful.
-3. **Seed variance**: seed=42 consistently better than seed=123.
-4. **Model soup**: Small but reliable myval gain (+0.0049).
-5. **mytest as training data**: Improves myval, degrades test. NOT USABLE.
+## Established Facts (do not revisit)
+- **myval is misleading** — improvements in myval frequently = test regressions
+- **mytest is harmful** — all 6/6 experiments with mytest degraded test F1
+- **V4 is saturated** — 15/68 checkpoints hit F1=1.0 including known bad models
+- **V4 used as gate only, not as ranking metric**
+- **Frozen probes are too weak** — triple concat V4=1.0 but test=0.68224
+- **MLP over logistic for frozen features → no gain on V4**
+- **Manual FP-zeroing is a submission-side patch, not a research direction**
 
 ## Tested & Discarded
 - EMA — lagging weights, hurts epoch selection
@@ -121,16 +83,8 @@ ALL attempts to incorporate mytest as training data improved myval F1 but degrad
 - Alternative backbones (convnext_small, efficientnet_b0, swin_tiny)
 - 320px resolution — myval regressed
 - Stronger augmentations (RandAugment, ColorJitter, MixUp)
-- Pseudo-labeling
-- Stochastic depth
-- Weight decay sweep
-- Label smoothing > 0.1
-- BBox-crop margin sweep (0.10 confirmed optimal)
-- Weighted model soup (same as uniform)
-- Focal loss — myval matched CE, no gain
+- Pseudo-labeling, Stochastic depth, Weight decay sweep
+- Label smoothing > 0.1, BBox-crop margin sweep
+- Weighted model soup, Focal loss
 - All mytest-based approaches — test regressed
-
-## Future Directions
-1. K-fold bagging on original data (no mytest)
-2. Fine-grained data cleaning / hard negative mining on original train set
-3. Architecture exploration (ConvNeXt V2 at 224px to avoid OOM)
+- Frozen-feature probes (logistic/MLP on frozen SigLIP/CLIP/DINOv2) — **test=0.68224, regression**

@@ -1,0 +1,21 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "permission": {
+        "bash": {
+            "*": "allow",
+            "rm": "ask",
+            "mv": "ask"
+        },
+        "edit": {
+            "*": "allow",
+            "myautoresearch/program.md": "deny",
+            "myautoresearch/scripts/**": "deny",
+            "myautoresearch/opencode.json": "deny",
+            "myautoresearch/autoresearch.config.json": "deny",
+            "my-autoresearch/program.md": "deny",
+            "my-autoresearch/scripts/**": "deny",
+            // "my-autoresearch/opencode.json": "deny",
+            "my-autoresearch/autoresearch.config.json": "deny"
+        }
+    }
+}

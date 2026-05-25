@@ -2,244 +2,99 @@
 
 ## Objective
 
-Maximize **test** F1 (Kaggle). BBox-crop preprocessing is the **default
-pipeline**. Bayes correction is disabled (test distribution unknown).
-Offline selection must now report both **myval F1@0.5** and the frozen-DINO
-test-like diagnostic.
+Maximize **test** F1 (Kaggle). Current SOTA: **0.71962**. Leaderboard #1: **~0.80**. Gap: **~0.08**.
 
-**CRITICAL UPDATE (2026-05-20): myval is an unreliable proxy when mytest
-data is involved.** Adding mytest as training data inflates myval F1
-(+0.02~+0.04) but degrades test F1 (-0.03~-0.15). See "mytest Generalization
-Failure" below.
-
-**CRITICAL UPDATE (2026-05-23): ABANDON myval as offline proxy. Use Testlike V4
-(train candidates, DINOv2 embeddings, rank corr=+0.97) for ALL offline
-judgment.** myval has been repeatedly shown to mislead — improvements in myval
-frequently correspond to test regressions (dinov2 mlp: myval +0.023, test -0.010;
-mytest augment: myval +0.044, test -0.028; etc).
-
-The V4 diagnostic dataset is at:
-`analysis/testlike_dino_train_v4/`
-Evaluation script: `analysis/evaluate_testlike_proxy.py` (now defaults to V4).
+This gap is a **model-capability / representation gap**, not fixable by manual FP-zeroing, post-processing, or shallow frozen-feature probes.
 
 ## Current State
 
-**Test SOTA: test_f1=0.71962** (soup checkpoint: top-3 epochs 20/39/26,
-288px, seed=42, cosine, thr=0.5, 4780 original bbox-crop images, reduced
-not-stone post-process).
+**Best test F1: 0.71962** (ConvNeXt Tiny, 288px, seed=42, cosine LR, bbox-crop, top-3 soup, reduced not-stone post-process).
 
-| Run | myval F1@0.5 | test F1 | Description |
-|-----|-------------|---------|-------------|
-| soup + reduced not-stone | 0.7251 | **0.71962** | current SOTA |
-| soup (old full not-stone) | 0.7251 | 0.69856 | old post-process |
-| mytest split protocol | 0.7321 | 0.65979 | mytest as train+val |
-| mytest pretrain→finetune | 0.7358 | 0.55214 | two-stage |
-| mytest aug + myval val | 0.7688 | 0.67021 | mytest merged, myval selects epoch |
-| split-val aug soup | 0.7446 | 0.63212 | no myval leak, still degraded |
+**Frozen-feature probes → DEAD END.** Triple concat (SigLIP+CLIP+DINOv2 + logistic regression) achieved V4=1.0/1.0 but scored test=0.68224 (-0.037 vs SOTA). The V4 proxy overfits to DINOv2 nearest-neighbor selection; models that rely heavily on DINOv2 features can "game" V4 without truly generalizing.
 
-### mytest Generalization Failure
+## Primary Research Direction: Stronger End-to-End Base Models
 
-Every approach that adds mytest data to training hurts test F1, regardless
-of whether myval leaks into training or not. The root cause is domain shift:
-mytest images come from Encyclopedia of Meteorites and Kaggle rock datasets,
-which have different visual characteristics from the competition test set.
+The 0.08 gap demands fundamentally stronger architectures AND end-to-end SGD training, not frozen features + shallow heads.
 
-The myval→test gap widens with mytest involvement:
-- no mytest: gap ~0.027
-- mytest aug: gap ~0.099
-- mytest pretrain: gap ~0.184
+### Priority 1: End-to-end fine-tune SigLIP ViT-B/16
 
-**Decision: do not use mytest as trusted supervised data.** Filtered or
-low-weight mytest experiments are allowed, but they must be judged by myval and
-DINO diagnostics before any submission.
+SigLIP ViT-B/16 is the strongest open-source vision-language backbone. It outperforms CLIP and DINOv2 on most fine-grained classification tasks.
 
-### Key Improvements Achieved
+```
+Train a standard end-to-end classifier:
+- Backbone: vit_base_patch16_siglip_224 (timm)
+- Resolution: 384px (native for SigLIP)
+- Training: standard 2-stage (head-only warmup → full fine-tune)
+- Optimizer: AdamW, head_lr=1e-4, backbone_lr=1e-5
+- Augmentation: CutMix=0.3, label_smoothing=0.1, dropout=0.1
+- LR schedule: cosine, 50 epochs
+- Data: 4780 original bbox-crop train images ONLY
+- Validation: internal 20% split (NOT myval)
+- Batch size: as large as GPU memory allows (target 64+)
+- Mixed precision: bf16 or fp16
+```
 
-| Change | split_val | myval | test |
-|--------|-----------|-------|------|
-| Baseline (hlr04) | 0.7664 | — | 0.42 |
-| + BBox-crop (bayes on) | 0.9444 | — | — |
-| + No Bayes + thresh=0.5 | **0.9708** | 0.6379 | 0.64516 |
-| + myval-as-validation + 288px + seed=42 + cosine | — | 0.7202 | — |
-| + top-3 model soup | — | **0.7251** | 0.69856 |
-| **+ reduced not-stone post-process** | — | **0.7251** | **0.71962** |
+**Why this first:** SigLIP features already showed strong frozen performance (V4=1.0, lowest diffs as single backbone). End-to-end fine-tuning should unlock significantly more capacity.
 
-### Current Offline Comparison Protocol
+### Priority 2: End-to-end fine-tune DINOv2 ViT-B/14
 
-For every new run, report at least:
+DINOv2 ViT-B/14 is the strongest self-supervised vision backbone. DINOv3 may be even better.
 
-1. post-hoc myval F1@0.5:
+```
+- Backbone: vit_base_patch14_dinov2.lvd142m or dinov3 variant
+- Resolution: 518px (native for DINOv2)
+- Same training recipe as Priority 1
+- May need stronger regularization (stochastic depth, higher weight decay)
+```
 
-   ```bash
-   python analysis/prob_dist.py \
-     --checkpoint train/outputs/<run_name>/best.pt \
-     --mask-dir preprocess/bbox_crop \
-     --val-source myval \
-     --no-plot \
-     --device cuda \
-     --batch-size 128
-   ```
+**Alternative:** Try DINOv3 variants if available in timm (convnext_tiny.dinov3_lvd1689m was tested earlier but regressed — may need different hyperparams).
 
-2. DINO test-like diagnostic:
+### Priority 3: Self-supervised domain pretraining → fine-tune
 
-   ```bash
-   python analysis/evaluate_testlike_proxy.py \
-     --manifest analysis/testlike_dino_myval_v3/manifest.csv \
-     --cluster-val analysis/testlike_dino_myval_v3/test_like_val_cluster.csv \
-     --top-val analysis/testlike_dino_myval_v3/test_like_val_top.csv \
-     --dataset-prefix <run_tag> \
-     --out-dir analysis/testlike_<run_tag>_eval \
-     --device cuda \
-     --batch-size 128 \
-     --num-workers 4
-   ```
+This is the highest-potential direction but requires more compute.
 
-Current soup baseline in the DINO diagnostic:
+**Approach:**
+1. Collect all unlabeled stone images: train (4780) + myval (332) + test (194) + mytest (3955) ≈ 9261 images. NEVER use mytest labels.
+2. Continue DINOv2 or MAE pretraining on these ~9k images for 50-200 epochs
+3. Fine-tune the domain-adapted backbone on original 4780 train labels using the recipe from Priority 1
+4. This injects domain knowledge (stone/mineral textures, lighting, backgrounds) without supervised mytest leakage
 
-| run | myval_masked F1@0.5 | DINO cluster F1@0.5 | DINO top F1@0.5 |
-|---|---:|---:|---:|
-| `soup_reduced_notstone` | 0.7230 | 0.7709 | 0.8045 |
+**Why high-potential:** The Kaggle test images share visual characteristics with mytest (both from Encyclopedia of Meteorites / Kaggle rock datasets). SSL on the combined pool adapts the backbone to this domain without using mytest labels. This is the most principled way to bridge the train→test domain gap.
 
-### Discarded Directions
+### Priority 4: ConvNeXt V2 at feasible resolution
 
-- Multi-seed ensemble, cutmix=0.5, weight decay sweep, dropout at seed=42
-- Label smoothing >0.1, higher/lower head_lr, lower backbone_lr
-- Stochastic depth, stronger augs, pseudo-labeling
-- Alternative backbones (convnext_small, efficientnet_b0, swin_tiny)
-- 320px resolution — myval F1 regressed to 0.6957
-- TTA (post-hoc) — did not improve F1@0.5
-- Focal loss — no myval gain over CE
-- **ALL mytest-based approaches** — myval up, test down
-  - mytest split protocol (0.65979)
-  - mytest pretrain→finetune (0.55214)
-  - mytest augmentation + myval val (0.67021)
-  - split-val + mytest augmentation (0.63212)
+ConvNeXt V2 has better inductive biases for small datasets than ViT. V2 Tiny at 224px was tested earlier (discarded for OOM at 288px), but with mixed precision and gradient checkpointing, 288px or 384px may be feasible.
 
-## Next Directions
+### Evaluation Protocol (for all experiments)
 
-1. **Use DINO test-like diagnostics for every experiment.**
-   `analysis/testlike_dino_myval_v3` is the current diagnostic set. It is not a
-   perfect final judge, but it is better than hard train-heavy test-like lists
-   and should be reported for every new checkpoint.
+1. **V4 cluster/top F1** — gate check (must be ≥ 0.99). But V4 is NOT sufficient for ranking.
+2. **Submission behavior**: positive count, diff vs current best (128 positives). Must be plausible.
+3. **No mytest labels in training** — domain pretraining on images OK, supervised on labels NOT OK.
+4. **Kaggle submission** is the only true metric. Do not trust offline proxies for final selection.
 
-2. **Audit and optimize `post_process/not-stone.txt`** — tied to the test-like
-   validation work. The current list has only 14 forced-zero test IDs and may
-   contain mistakes. Treat it as a hypothesis, not ground truth.
-
-   Proposed audit:
-   - For each not-stone test ID, retrieve top-k nearest neighbors from
-     train, myval, and mytest under DINO/CLIP/ConvNeXt embeddings.
-   - Compare neighbor label ratios and source distribution. If an ID's nearest
-     neighbors are mostly labeled meteorites, especially from multiple feature
-     families, it should not be blindly forced to 0.
-   - Aggregate existing model probabilities for each ID from the old soup and
-     discarded runs. If many independent models assign high positive
-     probability, mark the sample for manual review instead of automatic zeroing.
-   - Check cluster membership. IDs in isolated non-stone/OCR/artifact clusters
-     are stronger force-zero candidates than IDs embedded in the main test
-     distribution.
-   - Optionally use reverse image search manually for ambiguous IDs, especially
-     if nearest neighbors suggest the same source site may have been crawled
-     into mytest.
-
-   Suggested artifacts:
-   - `analysis/not_stone_audit/not_stone_neighbors.csv`
-   - `analysis/not_stone_audit/not_stone_summary.csv`
-   - revised candidate lists such as `not-stone.keep.txt`,
-     `not-stone.remove.txt`, and `not-stone.review.txt`
-
-3. K-fold bagging on original 4780 training data (no mytest) — already implemented in `run_kfold_bagging.py`
-4. **Pseudo-label / consistency adaptation on test** — lower priority until the
-   new proxy exists. Prefer soft labels and consistency loss over hard
-   high-confidence pseudo-labels.
-5. **Self-supervised DINO-style adaptation** — continue DINOv2/DINOv3 or similar
-   on all unlabeled stone images, including train/myval/test/mytest, but avoid
-   using mytest labels.
-6. **CLIP/SigLIP frozen-feature baselines and stacking** — use large pretrained
-   visual embeddings with logistic regression, kNN, SVM, or shallow stacking.
-7. Architecture exploration — ConvNeXt V2 at 224px (no mytest, OOM at 288px)
-
-
-
-## Strategic Pivot: Model Capability First
-
-The manual FP-zeroing work is now demoted to a submission-side safety tool. It found useful arithmetic evidence, but it is not the path to a 0.77+ jump. The large leaderboard gap is more likely a representation/model-capability gap or a better simple pipeline, not a sequence of tiny not-stone edits.
-
-Immediate priority:
-
-1. Run simple strong-backbone probes that are easy to reason about: frozen SigLIP/CLIP/DINO features plus logistic regression or a shallow MLP.
-2. Select by Testlike V4 first, but require submission behavior sanity: positive count, diff from current best, and no mytest-supervised leakage.
-3. Only after a simple model beats or matches current V4 behavior should we consider stacking/verifier complexity.
-4. Avoid spending more cycles on manual force-zero expansion unless it is submission day and the candidate is already supported by leaderboard arithmetic.
-
-Simple & works beats complex & marginal. The next experiment should be a frozen-feature V4 probe, not another hand-authored rule.
-
-
-## Cheap Model Runbook
-
-Use this when compute budget is limited. The goal is to test stronger representations with the simplest possible head before adding complexity.
+## Discarded: Will Not Revisit
 
 ### Frozen-feature probes
+Triple concat V4=1.0 → test=0.68224. Dead end.
+- Logistic regression on frozen features cannot match end-to-end SGD + augmentations.
+- V4 overfits to DINOv2 proximity; DINOv2-heavy models can game V4.
 
-Run a frozen timm backbone, train logistic regression on original train labels only, and evaluate Testlike V4 plus full 194-row submission behavior:
+### Manual FP-zeroing / not-stone expansion
+Gap of 0.08 cannot be closed by zeroing a few test IDs. Keep `inferred_88_177` as a submission-side safety patch only (expected +0.007 if arithmetic holds).
 
-    python analysis/train_frozen_feature_probe.py --model-name vit_base_patch16_siglip_224 --out-dir analysis/frozen_probe_siglip_vitb16_224 --batch-size 64 --num-workers 4 --device cuda --class-weight balanced
-    python analysis/train_frozen_feature_probe.py --model-name vit_base_patch32_clip_224 --out-dir analysis/frozen_probe_clip_vitb32_224 --batch-size 64 --num-workers 4 --device cuda --class-weight balanced
+### mytest as supervised data
+6/6 experiments degraded test. Domain shift is real and harmful. Use mytest images for SSL pretraining only, never for supervised training.
 
-Recommended cheap variants:
+### myval as proxy
+Repeatedly misleading — myval↑ with test↓. Internal split validation (20% of train) is safer.
 
-1. Try smaller/cheap timm CLIP/SigLIP backbones first: vit_base_patch32_clip_224, vit_base_patch16_siglip_224, resnet50_clip.
-2. Sweep logistic C only; do not tune augmentations or complex training until a representation has sane behavior.
-3. A candidate is interesting only if it passes V4 and keeps test behavior plausible: roughly 115-135 positives and not more than about 25-30 label diffs from current best.
-4. V4=1.0 alone is not enough. The first frozen probes reached V4=1.0 but were too conservative: 103-110 positives and 48-54 diffs.
+## Implementation Notes for New Training Script
 
-### Next simple experiments
+The existing training pipeline (`train/`) uses ConvNeXt Tiny. To support ViT backbones:
+- Replace `convnext_tiny` with timm model factory
+- Use timm's `resolve_model_data_config` + `create_transform` for proper ViT preprocessing
+- Support mixed precision (`torch.cuda.amp`)
+- Support gradient checkpointing for memory
+- Keep the proven recipe: 2-stage training, CutMix, cosine LR, no mytest
 
-1. Threshold-calibrate frozen probes toward 120-130 positives and re-evaluate V4.
-2. Replace logistic regression with a shallow MLP over frozen features.
-3. Concatenate cheap embeddings, for example SigLIP + CLIP + DINOv2, then train logistic/MLP.
-4. Only if these simple probes look sane, move to adapters or lightweight fine-tuning.
-
-Manual FP-zero work is not the main research path. Keep it as a submission-side patch only.
-
-## Long-Horizon / High-Variance Directions for Testlike V4
-
-Current leaderboard submission work is paused because daily submissions are exhausted. For offline exploration, optimize Testlike V4 aggressively, while treating it as a proxy rather than ground truth. Every candidate should report V4 cluster/top F1, current-submission diff count, positive count, and whether it preserves the known Kaggle arithmetic from recent submissions.
-
-Update after all-checkpoint sweep: V4 is already saturated by many historical checkpoints, including some known Kaggle regressions. Use V4 as a gate. Tie-break with positive count, current-best diff count, FP-risk arithmetic, multi-embedding agreement, and absence of mytest-supervised domain shift.
-
-Update after tie-breaker report: V4-gated comparable non-baseline submissions are dominated by mytest-supervised variants with large behavior shifts. Prioritize a second-stage verifier on current-best positives and multi-embedding FP consensus over any further mytest-supervised model selection.
-
-Update after verifier feature table: the current weak labels are too sparse for learned verifier training. Use analysis/verifier_features/current_positive_verifier_features.csv as the shared feature surface and keep inferred_88_177 as the only clean rule candidate until more leaderboard arithmetic, manual labels, or CLIP/SigLIP consensus features are added.
-
-Update after contact sheets: use analysis/verifier_contact_sheets/verifier_top20_neighbors.jpg for manual review before expanding any FP-zero rule beyond inferred_88_177. The priority manual-review set is 108,124,131 plus 20,106,82,138,35.
-
-Update after SigLIP/CLIP audit: DINO + SigLIP + CLIP agree that only 88 and 177 are strong negative candidates among current high-risk positives. VLM evidence makes 124 less attractive to zero and leaves 108/131 unresolved. Do not expand beyond inferred_88_177 until manual review or another leaderboard split is available.
-
-### A. V4-first model search
-
-1. Re-score all saved checkpoints and soups on V4, then build a V4-selected ensemble/stacker rather than myval-selected ensemble. Avoid naive soft-voting; learn a small meta-rule from out-of-fold train predictions plus V4 candidates.
-2. Train a second-stage verifier only on current-soup positive candidates. Objective: reduce FP among high-recall positives. Candidate features: soup prob, DINO MLP label, DINO kNN label ratios, CLIP/SigLIP scores, crop/mask metadata, V4 cluster/test-likeness.
-3. Optimize threshold and per-cluster thresholds on V4, but constrain total positive count near the inferred hidden-test range. Record positive-count sensitivity.
-
-### B. Multi-embedding FP/TP inference
-
-1. Add SigLIP/CLIP embeddings to the DINO FP-risk audit. Use them mainly as semantic anomaly detectors, not as direct classifiers.
-2. Build consensus kNN evidence across DINOv2, DINOv3, SigLIP, ConvNeXt penultimate features, and simple image statistics. Rank only samples where multiple embedding families agree.
-3. Use pairwise submission arithmetic to infer labels for small candidate groups. Recent results imply 88 and 177 are strong FP candidates, while exactly one of 108,124,131 is likely FP.
-
-### C. Self-supervised / domain adaptation
-
-1. Continue DINOv2 or MAE-style SSL on all unlabeled stone crops: train + myval + test + mytest images, but never use mytest labels. Then train linear/MLP probes and small adapters on original train labels only.
-2. Try parameter-efficient ViT adaptation: freeze backbone, train LoRA/adapters/LayerNorm affine on train labels, optionally with consistency loss on unlabeled test crops.
-3. Try TENT-style test-time adaptation with only normalization/adapters updated. Reject candidates that increase positive count or collapse confidence.
-
-### D. Data cleaning guided by V4
-
-1. Identify train samples least similar to test distribution under V4/DINO and downweight or exclude them. Evaluate whether a smaller, more test-like supervised set improves V4.
-2. Hard-negative mine from original train only: train negatives that are nearest to current test positives, plus high-probability false positives under OOF prediction.
-3. Audit duplicated or contradictory train/myval images in embedding space. Remove or downweight suspicious labels before training verifier models.
-
-### E. Submission policy after daily reset
-
-The next most informative candidate is current best plus force-zero 88,177 only: analysis/test_fp_risk_audit_dino_nomtest/submission_inferred_zero_88_177.csv. If the arithmetic inference is exact, expected F1 is about 0.72642. Do not submit larger DINO FP-risk batches until this is tested.
+Script to create: `train/train_vit.py` or extend existing `train/train.py` to accept `--backbone` argument.
