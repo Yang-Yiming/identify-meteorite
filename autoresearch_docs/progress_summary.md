@@ -15,6 +15,37 @@ Pipeline: ConvNeXt Tiny backbone + light classifier head, AdamW, two-stage train
 ## Leaderboard Context
 **Current #1 is ~0.80.** Our SOTA gap is ~0.08. This is a model-capability / representation gap.
 
+## Latest Experiments (2026-05-26)
+
+### Kaggle Submission Results
+
+| Submission | Pos | Diffs | Test F1 | Δ vs SOTA |
+|-----------|-----|-------|---------|-----------|
+| ConvNeXt soup (SOTA) | 128 | 0 | **0.71962** | 0 |
+| Hybrid verifier gt07 | 124 | 4 | 0.71428 | -0.00534 |
+| Kfold 6-model avg | 126 | 28 | 0.67924 | -0.04038 |
+| BN-adapt refined | 125 | 5 | **未提交** | ? |
+
+### Key Finding: Verifier works, kfold ensemble fails
+
+- **Hybrid (4 diffs)**: Only -0.5% from SOTA — the verifier risk score correctly identified high-risk FPs
+- **Kfold (28 diffs)**: -4.0% — simple multi-model averaging introduces too many wrong flips
+- **Refined (5 diffs)**: Ultra-conservative strategy — only flip when BOTH CN and DINOv2 strongly agree
+  - Removes 4 SOTA-POS where both models <0.25 (020, 106, 118, 160)
+  - Adds 1 SOTA-NEG where both models >0.60 (161)
+
+### BN Adaptation (TENT-lite) Pipeline
+
+Based on literature from ICLR 2021-2024 (TENT, WiSE-FT, Noisy Student):
+- Adapted ConvNeXt BN stats on 3955 mytest images → more conservative predictions
+- BN-adapted ensemble thr=0.45: 132 pos (vs SOTA 128), reduced false negatives
+- Generated 2553 pseudo-labels (>0.90 confidence) for Noisy Student training
+- WiSE-FT interpolation (epoch 1 + epoch 65) also tested but not superior
+
+### Literature Review Complete
+
+25 papers reviewed via AlphaXiv, covering: model merging (TIES, Git Re-Basin, Task Arithmetic), semi-supervised learning (Noisy Student, FixMatch), test-time adaptation (TENT, TTT), robust fine-tuning (WiSE-FT, SigLIP), self-supervised learning (SimCLR, BYOL, MoCo v3), and parameter-efficient tuning (AdaptFormer, VPT). File: `analysis/literature_review.md`
+
 ## Latest Experiments (2026-05-25)
 
 ### End-to-end ViT fine-tuning

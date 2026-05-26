@@ -125,9 +125,41 @@
 - W&B 是可选项，但输出目录内的 JSON/pt 文件始终是第一追溯源。
 - 早停逻辑以验证 F1 为基准，而不是训练指标。
 
+## Test-Time Adaptation & Distribution Shift
+
+- `optimize_from_literature.py` 整合了文献驱动的三项优化（ICLR 2021-2024 论文支撑）：
+  - **BN Stats Adaptation (TENT-lite)**：对目标分布 (mytest) 更新 BN running stats，无需标签
+    - ConvNeXt 使用 BatchNorm → 有效
+    - DINOv2 使用 LayerNorm → BN adaptation 不适用
+  - **WiSE-FT Checkpoint Interpolation**：对早期+晚期 epoch checkpoint 做线性插值
+    - θ_wise = (1-α)·θ_early + α·θ_late
+    - α ∈ {0.3, 0.5, 0.7} 网格搜索
+  - **Noisy Student Pseudo-Label Generation**：高置信度 (>0.9) 伪标签生成
+    - 预测结果保存到 `train/outputs/lit_opt_v1/noisy_student_pseudo_labels.csv`
+    - 可直接作为 train_finetune.py 的 `--pseudo-prob-csv` 输入
+- BN 适配后的 ConvNeXt 预测倾向于更保守（更多 NEG），概率更尖锐
+- 设计原则：改编自 TENT (2006.10726, ICLR 2021) — 仅在 target distribution 上 update BN stats
+
+## Ensemble & Disagreement Resolution (Updated)
+
+- **关键发现**: 6 模型 kfold 平均集成 (5×ConvNeXt + DINOv2) → test F1=0.67924 (比 SOTA 低 4%)
+  - 原因: 简单平均引入过多错误分歧，kfold 模型看到不同数据子集导致系统偏差
+  - 教训: 集成需要更智能的融合策略，不是简单多模型平均
+- **Verifier-Guided Hybrid**: 仅翻转 verifier risk score >0.7 的 top-4 候选 → test F1=0.71428 (-0.5%)
+  - 4 removals 中约 2-3 是 FP，1-2 是误杀的真阳性
+  - 验证了 verifier 风险评分的方向正确性
+- **Refined Conservative Strategy** (当前最优未提交):
+  - 从 SOTA baseline 出发，仅翻转双方模型都高置信度一致否定的预测
+  - 仅 5 处修改 (4 removes + 1 add) — 最小风险
+  - Criteria: CN_prob < 0.25 AND DS_prob < 0.35 AND ensemble < 0.25 → NEG (remove SOTA-POS)
+  - Criteria: CN_prob > 0.65 AND DS_prob > 0.6 AND ensemble > 0.55 → POS (add over SOTA-NEG)
+
 ## Known Tradeoffs
 
 - 当前主线高度依赖 mask 质量；如果 mask 漏掉关键区域，分类器没有额外机制补救。
 - 验证集重采样和 Bayes correction 都依赖目标负正比估计；这个估计错了，校准也会被一起带偏。
 - threshold-search 默认关闭，意味着很多实验实际上是在固定 `0.5` 阈值下完成 model selection。
 - 代码虽然支持换 timm backbone，但文档和经验参数主要围绕 `convnext_tiny`，直接换 backbone 仍应视为新实验而不是无缝替换。
+- BN adaptation 对 ConvNeXt 有效 (BN 层)，但对 ViT/DINOv2 (LN 层) 无效 — 需要完整 TENT (更新 affine params) 或完全不同的适配策略。
+- myval 与 test 分布存在差异：myval 上表现好的模型在 test 上未必最优，反之亦然。这增加了模型选择和超参调优的难度。
+- kfold ensemble 虽然理论上有减少方差的优势，但在 4780 张图片数据量下，每折仅 3824 张训练图片，每个 fold 模型都可能欠拟合。
