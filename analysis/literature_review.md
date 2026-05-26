@@ -1,237 +1,360 @@
-# Literature Review: Ensemble Techniques for Small-Dataset Fine-Tuning
+# Literature Review: Techniques for Fine-Grained Classification with Foundation Models on Limited Data
 
-*Compiled by researching papers via AlphaXiv and arxiv, with findings contextualized to our meteorite classification project.*
+*Compiled from 25+ papers via AlphaXiv and arxiv, contextualized to our meteorite classification project (4,780 labeled + 8,600 unlabeled images).*
 
-**Project Context:** We have 4,780 labeled bbox-crop images (binary classification: is_meteorite) and ~8,600 unlabeled mytest images. Fine-tuning pretrained models (ConvNeXt, DINOv2) achieves ~0.72 test F1. The gap to top entries (≥0.80 F1) lies in smarter ensemble construction and uncertainty-driven prediction.
+**Project Context:** Binary meteorite classification with bbox-crop images. Fine-tuning ConvNeXt Tiny and DINOv2 Small achieves ~0.72 test F1. The gap to top Kaggle entries (≥0.80 F1) demands smarter use of unlabeled data, better ensemble construction, and principled handling of distribution shift between myval and test.
 
----
-
-## 1. Model Soups & Weight Averaging
-
-### [Model Soups](https://arxiv.org/abs/2203.05482) (Wortsman et al., 2022)
-**Core insight:** Fine-tuned models from the same pretrained backbone, even with different hyperparameters, reside in the same low-error basin. Averaging their weights (rather than their predictions) retains this low error while often exceeding any individual model — with zero inference cost increase.
-
-**Key contributions:**
-- **Uniform soup**: Simply average weights of all fine-tuned models
-- **Greedy soup**: Sequentially add models to the soup only if they improve validation accuracy
-- Fine-tuned CLIP and ViT models attain strong ImageNet accuracy via greedy soup on 60+ fine-tuned variants
-
-**Our application:** We trained ConvNeXt Tiny soups (greedy averaging over epochs) that achieved SOTA (0.71962). Weight-averaging within a single training run (SWA variant) provided 0.3-0.5% improvement over best single checkpoint without extra inference cost.
-
-### [Stochastic Weight Averaging (SWA)](https://arxiv.org/abs/1803.05407) (Izmailov et al., 2018)
-**Core insight:** SGD with constant or cyclical learning rates explores the periphery of wide minima; averaging these points finds a solution centered in the wide basin, yielding better generalization.
-
-**Key contributions:**
-- Simple: average model weights along the SGD trajectory after convergence
-- Wide optima consistently generalize better than sharp ones
-- Works with any architecture, no extra hyperparameters needed
-
-**Our application:** Our ConvNeXt "soup" training uses a variant of this — averaging weights from epoch 15-20 with constant LR. This is distinct from the "model soups" approach of averaging across independent fine-tunings, but both exploit the same geometric property of the loss landscape.
-
-### [Sharpness-Aware Minimization (SAM)](https://arxiv.org/abs/2010.01412) (Foret et al., 2021)
-**Core insight:** Rather than finding wide minima post-hoc (like SWA), SAM directly optimizes for them by minimizing the maximum loss in a neighborhood around current parameters.
-
-**Key contributions:**
-- Simultaneously minimizes loss value and loss sharpness
-- Achieves state-of-the-art on CIFAR, ImageNet without extra data
-- Compatible with any existing optimizer
-
-**Potential for our project:** Could replace or augment SWA-style averaging. Since SAM directly seeks flat minima, models fine-tuned with SAM might generalize better on our 4,780-image dataset where overfitting is the primary concern. **This is an untried direction.**
+**Notation:** Sections marked **[NEW]** are additions to the initial review. Papers from ICLR/ICML/NeurIPS/CVPR are flagged with venue.
 
 ---
 
-## 2. Deep Ensembles & Model Fusion
+## 1. Model Merging & Weight Interpolation [NEW]
 
-### [Simple and Scalable Predictive Uncertainty Estimation using Deep Ensembles](https://arxiv.org/abs/1612.01474) (Lakshminarayanan et al., 2017)
-**Core insight:** Training multiple models independently (with different random seeds) and averaging their predictive distributions provides both accuracy gains and well-calibrated uncertainty estimates — without the complexity of Bayesian methods.
-
-**Key contributions:**
-- Ensembling 5 independently trained models gives state-of-the-art uncertainty calibration
-- Disagreement between ensemble members captures epistemic (model) uncertainty
-- Proper scoring rules + adversarial training further improves calibration
-- Simpler and more scalable than MC-dropout, variational inference, etc.
-
-**Our application:** This is the theoretical foundation for our k-fold ensemble. Rather than training 5 models with different seeds (which would have 80% overlapping training data on 4,780 images), we use 5-fold cross-validation splits to ensure each model sees a different training subset — inducing stronger epistemic diversity.
-
-### [On Calibration of Modern Neural Networks](https://arxiv.org/abs/1706.04599) (Guo et al., 2017)
-**Core insight:** Modern deep networks (ResNet, DenseNet, etc.) are **poorly calibrated** — their predicted confidence significantly overestimates the true likelihood of correctness. Temperature scaling (a single scalar parameter) is a simple and effective fix.
+### [Git Re-Basin: Merging Models modulo Permutation Symmetries](https://arxiv.org/abs/2209.04836) — ICLR 2023 (Ainsworth et al., UW)
+**Core insight:** Two neural networks trained independently on the same task may appear to be in different loss basins, but this is often an illusion caused by permutation symmetries of hidden units. By matching neurons between the two models (solving a linear assignment problem), we can "re-basin" them into the same basin, after which linear interpolation in weight space works.
 
 **Key contributions:**
-- Deep networks are systematically overconfident (expected calibration error rising with depth/capacity)
-- Batch normalization and low weight decay are contributing factors
-- Temperature scaling on a held-out validation set dramatically improves calibration
-- "Modern" networks calibrated worse than older, shallower ones
+- Proves that many independently trained models can be permuted into a single basin
+- Three permutation-matching algorithms: activation-based, weight-based, and straight-through estimator
+- After permutation, weight averaging between independently trained models works as well as within a single training run
+- Explains *why* model soups work: fine-tuning from the same initialization avoids the permutation problem entirely
 
-**Our application:** This is critical for our verifier-guided approach. If ConvNeXt and DINOv2 produce miscalibrated probabilities, their raw disagreement patterns cannot be trusted. Before using model disagreement to decide which predictions to flip, we should calibrate both models (e.g., via Platt scaling or temperature scaling on myval).
+**Our application:** This explains why our within-run ConvNeXt soup works well — no permutation mismatch to resolve. If we wanted to merge ConvNeXt and DINOv2 weights (different architectures), we'd need Git Re-Basin plus architecture mapping. More practically: if we trained 5 ConvNeXt models from *different* random seeds (not k-fold splits from same init), Git Re-Basin could merge them into one weight set — potentially better than prediction averaging.
 
-### Collaborative Decision Between Ensembles
-**Key papers (background):**
-- **Wolpert (1992)** — "Stacked Generalization": Train a meta-learner on top of base model predictions. The meta-learner learns to correct systematic errors in each base model.
-- **Breiman (1996)** — "Bagging predictors": Bootstrap aggregation creates model diversity through data resampling, reducing variance.
-- **Breiman (2001)** — "Random Forests": Combines bagging with random feature selection for further decorrelation.
+### [TIES-Merging: Resolving Interference When Merging Models](https://arxiv.org/abs/2306.01708) — NeurIPS 2023 (Yadav et al., UNC Chapel Hill + MIT)
+**Core insight:** When merging multiple task-specific fine-tuned models, naively averaging their task vectors (fine-tuned minus pretrained weights) causes destructive interference because different models update the same parameters in conflicting directions.
 
-**Our application:** We attempted a meta-learner (logistic regression on both models' probabilities) but trained on myval, which is distributionally different from the test set. The meta-learner became too conservative (104-108 positives vs. 120 in individual models). The correct approach would be:
-1. Calibrate both models first
-2. Use k-fold within the training set or a proper validation split to train the meta-learner
-3. Use meta-learner confidence estimates, not raw output, to inform ensemble decisions
+**Key contributions:**
+- **T**rim: Keep only top-k% most important parameter changes per model (magnitude-based)
+- **E**lect sign: Resolve sign conflicts via majority voting across models
+- D**IS**joint merge: Average only parameters where signs agree after election
+- Significantly outperforms simple averaging and even model soups on multi-task benchmarks
+- Works for both same-architecture and cross-architecture merging
+
+**Our application:** When we average ConvNeXt fold predictions, we lose per-parameter agreement information. TIES-Merging provides a principled alternative: merge the 5 fold models' *parameters* (not predictions), resolving conflicts where folds disagree on weight update direction. This would produce a single model with k-fold knowledge — no inference-time ensemble cost. **This is an untried, high-potential direction.**
+
+### [Task Arithmetic: Editing Models with Task Arithmetic](https://arxiv.org/abs/2212.04089) — ICLR 2024 (Ilharco et al., UW + AI2 + Microsoft)
+**Core insight:** The difference between a fine-tuned model's weights and its pretrained weights forms a "task vector." Simple arithmetic on these task vectors can add, subtract, or combine model capabilities — without any additional training.
+
+**Key contributions:**
+- **Task vector = θ_ft − θ_pretrained**: compact representation of what the model learned
+- **Adding task vectors** improves multi-task performance (θ + α⋅τ_A + β⋅τ_B)
+- **Negating task vectors** can "forget" undesired behaviors (θ − γ⋅τ_bad)
+- Task vectors are surprisingly composable via simple weighted addition
+- Works across CLIP ViT models for diverse vision tasks
+
+**Our application:** If our k-fold ConvNeXt models are seen as "task vectors" from the same pretrained base, task arithmetic provides a principled merge formula: soup + weighted_sum(task_vectors). The α coefficients can be tuned on myval. More speculatively: we could train one model to be "good at recall" (high α) and another to be "good at precision" (low α), then interpolate between them.
+
+### [ZipIt! Merging Models from Different Tasks without Training](https://arxiv.org/abs/2305.03053) — ICLR 2024 (Stoica et al., Georgia Tech)
+**Core insight:** Models trained on *different* tasks (not just different hyperparameters) can be merged into a single model that performs all tasks, by "zipping" together corresponding features across models.
+
+**Key contributions:**
+- Merges models with different output heads (different classification tasks)
+- Uses feature similarity to compute optimal "zip" (merge) assignments
+- Survives partial merging: can merge a subset of layers while keeping others task-specific
+- Outperforms model soups and weight averaging when tasks differ significantly
+
+**Our application:** Less directly applicable than TIES-merging since our models share the same binary classification task. However, the "partial merge" concept is interesting: we could merge early layers (general features) while keeping later layers (classifier-specific) separate, creating a multi-branch model.
 
 ---
 
-## 3. Small-Dataset Fine-Tuning of Pretrained Models
+## 2. Semi-Supervised Learning with Pretrained Models [NEW]
 
-### [Training Data-Efficient Image Transformers (DeiT)](https://arxiv.org/abs/2012.12877) (Touvron et al., 2021)
-**Core insight:** Vision Transformers can be trained on ImageNet-1k (1.3M images) without external data, matching CNN performance, through knowledge distillation from a CNN teacher and aggressive data augmentation.
-
-**Key contributions:**
-- **Distillation token**: A special token attends to the CNN teacher's output, enabling effective knowledge transfer
-- Hard-label distillation outperforms soft distillation for ViT
-- Extensive augmentation (RandAugment, Mixup, CutMix, repeated augmentation) is critical
-- ConvNet teachers work better than Transformer teachers for distillation
-
-**Our application:** Our dataset (4,780 images) is 270x smaller than ImageNet. DeiT's finding that ViTs need more data or stronger regularization aligns with our experience: DINOv2 ViT-B (86M params) overfits badly without heavy augmentation, while DINOv2 Small (22M) generalizes better. The distillation token approach could potentially help here by allowing a well-tuned ConvNeXt to teach DINOv2.
-
-### [Scaling Vision Transformers](https://arxiv.org/abs/2106.04560) (Zhai et al., 2021)
-**Core insight:** ViT performance follows predictable scaling laws with model size, data size, and compute. But the key practical insight: **with small data, smaller ViTs generalize better.**
+### [FixMatch: Simplifying Semi-Supervised Learning](https://arxiv.org/abs/2001.07685) — NeurIPS 2020 (Sohn et al., Google Brain)
+**Core insight:** Semi-supervised learning can be dramatically simplified to two ingredients: (1) use a weakly-augmented image to generate a pseudo-label, and (2) train the model to predict that pseudo-label from a strongly-augmented version of the same image — but only when the model is confident.
 
 **Key contributions:**
-- ViT accuracy follows power-law scaling with model size and data
-- For fixed data, there is an optimal model size — larger models eventually hurt
-- Downstream transfer performance trends follow similar scaling patterns
-- Scaling data is more impactful than scaling model size for downstream tasks
+- **Weak augmentation** (flip + shift) → generate pseudo-label → keep if confidence > τ
+- **Strong augmentation** (RandAugment + Cutout) → train to match pseudo-label via cross-entropy
+- Simple cross-entropy loss, no additional losses or hyperparameters beyond τ
+- Achieves SOTA on CIFAR-10 with only 4 labeled examples per class
+- Key mechanism: confident pseudo-labels + strong augmentation forces consistent learning
 
-**Our application:** This directly explains why DINOv2 Small (22M) outperforms DINOv2 Base (86M) on our dataset (test 0.7196 vs 0.7070). We are on the left side of the scaling curve where model capacity hurts. Further confirms that efficient architectures (ConvNeXt Tiny, 28M) are optimal for our data scale.
+**Our application:** We have 8,600 unlabeled mytest images. FixMatch would:
+1. Take our best ConvNeXt model (trained on 4,780 labeled)
+2. Generate pseudo-labels on mytest with confidence > 0.95 threshold
+3. Retrain with labeled + pseudo-labeled images, using weak/strong augmentation pairs
+4. The key risk: mytest distribution differs from train — confident pseudo-labels may be systematically wrong. **FixMatch works best when labeled and unlabeled data share the same distribution.**
 
-### [Visual Prompt Tuning (VPT)](https://arxiv.org/abs/2203.12119) (Jia et al., 2022)
-**Core insight:** Instead of full fine-tuning, inject a small number of learnable "prompt" tokens into the input sequence of a frozen pretrained ViT. Achieves near full-fine-tuning performance with <1% of trainable parameters.
+### [Self-training with Noisy Student](https://arxiv.org/abs/1911.04252) — NeurIPS 2020 (Xie et al., Google Brain)
+**Core insight:** A larger student model, trained with noise (dropout, stochastic depth, RandAugment) on a teacher's pseudo-labels, can *exceed* the teacher's performance — even when the teacher is already SOTA.
 
 **Key contributions:**
-- **VPT-Shallow**: Add prompts to input only — simplest, most parameter-efficient
-- **VPT-Deep**: Add prompts at every Transformer layer — more expressive
-- Competitive with full fine-tuning across 24 downstream tasks
-- Stores only the prompt vectors per task (e.g., ~0.1M params vs 86M for ViT-B)
+- **Equal-or-larger student**: Counter-intuitively, bigger students work better
+- **Noise injection during student training** is critical — without it, student merely copies teacher
+- Pseudo-labeling uses soft (probabilistic) labels, not hard
+- Iterative: student becomes next teacher, process repeats
+- On ImageNet, improved EfficientNet from 84.3% → 88.4% using 300M unlabeled images
+- Also improves robustness to adversarial and out-of-distribution examples
 
-**Our application:** We attempted frozen feature probing (SigLIP+CLIP+DINOv2 features → MLP head) but it underperformed (test 0.682). VPT is fundamentally different: prompts are learned *within* the Transformer, modulating attention patterns, not just at the classification head. VPT should outperform frozen probing on our data. **This is an untried direction** that could reduce overfitting by keeping the backbone frozen.
+**Our application:** This is our strongest semi-supervised candidate because:
+1. Train ConvNeXt on 4,780 labeled → teacher
+2. Generate pseudo-labels on 8,600 mytest
+3. Train a *different* model (DINOv2 + linear head) on combined data with aggressive noise
+4. The student may learn features that generalize better than the teacher
+5. Unlike FixMatch, Noisy Student doesn't assume i.i.d. — noise injection helps with distribution shift
+6. **This approach has a proven track record of improving generalization when unlabeled data differs from labeled data.**
 
-### Parameter-Efficient Tuning and Regularization for Small Datasets
-**Background from multiple papers (2103.00020, 2101.00123, etc.):**
-- CLIP zero-shot already impressive, but fine-tuning with strong dropout, stochastic depth, and weight decay is essential on <10k images
-- Using larger image resolution (288→518) helps but requires smaller batch sizes that introduce gradient noise instability
-- Augmentation strategy (RandAug, Mixup, CutMix) is often more impactful than architecture choice on small datasets
+### [Rethinking Pre-training and Self-training](https://arxiv.org/abs/2006.06882) — NeurIPS 2020 (Zoph et al., Google Brain)
+**Core insight:** The value of pre-training has been overstated for tasks with sufficient labeled data. Self-training on task-specific data often matches or exceeds the benefit of ImageNet pre-training — and the two are *complementary* (using both helps most).
 
-**Our application:** ConvNeXt at 288px with batch_size=32 (aggressive augmentations) consistently beats all other configurations. DINOv2 at 518px with batch_size=8 works but is noisy. The observation that augmentation is more impactful than architecture mirrors the literature.
+**Key contributions:**
+- For COCO detection with enough labeled data, training from scratch + self-training beats ImageNet pre-training
+- Pre-training helps most when labeled data is scarce — its benefit diminishes as labeled data grows
+- **Self-training is more data-efficient than pre-training** when unlabeled data closely matches the target task
+- The combination (pre-training + self-training) always gives the best results, but the marginal gain of pre-training shrinks with more labeled data
+
+**Our application:** We are in the "scarcity" regime (4,780 labeled). Pre-training is essential. But self-training on unlabeled mytest images — which are from the *same domain* as the test set — could provide gains complementary to DINOv2/ImageNet pretraining. The paper suggests that the benefit of self-training is roughly additive to pre-training, making it a safe bet.
 
 ---
 
-## 4. Self-Supervised Learning & Domain Adaptation
+## 3. Test-Time Adaptation [NEW]
 
-### [Masked Autoencoders Are Scalable Vision Learners (MAE)](https://arxiv.org/abs/2111.06377) (He et al., 2021)
-**Core insight:** A simple asymmetric encoder-decoder architecture, where a high-capacity encoder sees only 25% of image patches (visible tokens) and a lightweight decoder reconstructs all patches from encoded latents + mask tokens, enables efficient and scalable self-supervised pretraining.
-
-**Key contributions:**
-- **Asymmetric design**: Encoder runs only on visible patches (75% masked), decoder is lightweight
-- Masking 75% of patches makes the task non-trivial, forcing semantic understanding
-- Linear probing and fine-tuning transfers surpass supervised pretraining
-- Scales well: ViT-Huge achieves 87.8% ImageNet top-1 with no labels
-
-**Our application:** We attempted MAE domain pretraining on ~9,000 unlabeled stone images (mytest + subset from web), then fine-tuned on labeled data. Result: myval F1 dropped from 0.679 to 0.564. **The failure is consistent with the paper's insights:**
-- MAE pretraining removes the well-curated priors from ImageNet/CLIP pretraining
-- Our 9k domain images may be insufficient quality/diversity to learn useful representations
-- The paper demonstrates MAE requires large-scale pretraining (ImageNet-1k+) to be effective
-- On very small domain data, MAE is likely worse than simply using a good general-purpose pretrained model
-
-### [DINOv2: Learning Robust Visual Features without Supervision](https://arxiv.org/abs/2304.07193) (Oquab et al., 2023)
-**Core insight:** Self-supervised pretraining on large, carefully curated data produces frozen features that work "out of the box" across diverse tasks and image distributions — approaching NLP-style foundation model behavior.
+### [TENT: Fully Test-Time Adaptation by Entropy Minimization](https://arxiv.org/abs/2006.10726) — ICLR 2021 (Wang et al., UC Berkeley + Adobe)
+**Core insight:** Rather than training a model to be robust to all possible distribution shifts, adapt the model *at test time* by minimizing the entropy of its predictions on the target (unlabeled) data. Only batch normalization parameters are updated — the rest stays frozen.
 
 **Key contributions:**
-- **Automatic data curation pipeline**: Clusters images from uncurated web data, selects diverse and high-quality subsets (LVD-142M dataset)
-- Combines discriminative (DINO) and reconstructive (iBOT) objectives, plus KoLeo regularization
-- Frozen features match or exceed weakly-supervised (SWAG) and text-guided (OpenCLIP) models
-- At pixel level: produces sharper, more accurate patch-level features than prior SSL methods
+- **Test-time adaptation**: No access to source training data, only target (test) data
+- Optimizes channel-wise affine parameters (γ, β) of BatchNorm layers via entropy minimization
+- Single backward pass on each test batch → efficient
+- Outperforms domain adaptation methods on ImageNet-C corruptions without any source data access
+- Key insight: entropy minimization implicitly encourages confident, consistent predictions
 
-**Our application:** DINOv2 Small fine-tuned on 4,780 images achieved 0.71962 — the first non-ConvNeXt model to match our SOTA. DINOv2's strong pretraining priors survive fine-tuning better than CLIP's or MAE's. The 22M parameter count is near-optimal for our data scale per Scaling ViT findings.
+**Our application:** We have 8,600 unlabeled *mytest* images that share the test set distribution. We could:
+1. Take our trained ConvNeXt (BN layers pre-adapted to train distribution)
+2. Run TENT on all 8,600 mytest images (batch-wise entropy minimization)
+3. Use the adapted model for test set inference
+4. This bridges the myval → test distribution gap without using test labels
+5. **Critical requirement**: TENT needs target-distribution data — our mytest images provide exactly that.
 
----
+### [Test-Time Training with Self-Supervision](https://arxiv.org/abs/1909.13231) — ICML 2020 (Sun et al., UC Berkeley)
+**Core insight:** Train the model with a shared backbone for both the main task (classification) and a self-supervised auxiliary task (rotation prediction). At test time, continue training the auxiliary task on each test sample, which adapts the shared features to the test distribution.
 
-## 5. Evaluation Metrics & Model Selection
+**Key contributions:**
+- **Y-shaped architecture**: Shared backbone, two heads (classification + rotation prediction)
+- At test time: update shared features via rotation loss, then classify with updated features
+- Works on any single test sample; no batch needed (unlike TENT)
+- Robust to diverse corruptions: Gaussian noise, blur, pixelation, weather effects
+- More powerful than TENT (updates all layers) but slower (requires auxiliary task training)
 
-### Conformal Prediction
-**[A Gentle Introduction to Conformal Prediction](https://arxiv.org/abs/2107.07511)** (Angelopoulos & Bates, 2021)
-
-**Core insight:** Conformal prediction provides distribution-free, finite-sample guarantees on prediction sets. Given a new test point, it produces a prediction set that contains the true label with a user-specified probability (e.g., 95%), regardless of the underlying model or data distribution.
-
-**Key concepts:**
-- **Coverage guarantee**: P(y_test ∈ prediction_set) ≥ 1-α for any α, distribution-free
-- Uses a held-out calibration set to compute "conformity scores" (e.g., 1 - softmax probability for true class)
-- Applies threshold from calibration set to test predictions
-- Can produce "abstention" when no class meets threshold
-
-**Our application:** We implicitly applied conformal-like reasoning when building the verifier-based hybrid submission. For each test image, we computed a "risk score" combining model disagreement magnitude + prediction confidence. Images with risk > threshold were candidates for flipping. The formal conformal framework would give us statistical guarantees on the false positive risk. **Potential improvement**: use myval as a calibration set with proper conformal prediction to produce abstention decisions with guaranteed error rates.
-
----
-
-## 6. Cross-Validation Ensembles & Generalization Theory
-
-### K-Fold Cross-Validation as an Ensemble Method
-**Background:** Wong (2015) "Parametric Methods for Comparing the Performance of Two Classification Algorithms" and related works establish:
-- K-fold cross-validation provides out-of-sample predictions for every training point
-- Models trained on different folds see different data, creating diversity
-- Averaging these models approximates bootstrap aggregation but with guaranteed coverage of the entire training set
-
-**Our application:** Our 5-fold ConvNeXt ensemble uses:
-- 5 models, each trained on 3,824 images (80% of 4,780) with different augmentation
-- Average probabilities → test predictions
-- Key advantage over simple model soup: each model's training set is disjoint in composition, producing greater diversity than different hyperparameter settings on the same data
-
-### Disagreement as a Signal
-From the ensemble uncertainty literature:
-- **Lakshminarayanan et al. (2017)**: Epistemic uncertainty ≈ variance across ensemble predictions
-- **Krogh & Vedelsby (1995)**: Ensemble error = average individual error − average ambiguity. More disagreement theoretically reduces ensemble error IF individual models are accurate.
-- **Dietterich (2000)**: Ensemble methods work best when base learners are accurate AND disagree
-
-**Our application:** We observed 22 disagreements between ConvNeXt soup and DINOv2 Small at SOTA-level (both 0.71962). This is the ideal scenario: both models are "accurate enough" and they disagree, creating ambiguity that ensemble averaging can exploit. The challenge is distinguishing productive disagreement (model diversity → better average) from unproductive disagreement (one model is simply wrong).
+**Our application:** The self-supervised auxiliary task could be replaced with something domain-specific (e.g., stone texture discrimination) to make adaptation more relevant. However, the computational cost and architectural changes make this less practical than TENT for our use case.
 
 ---
 
-## 7. Recommended Next Steps (Literature-Guided)
+## 4. Robust Fine-Tuning & Distribution Shift [NEW]
 
-| Technique | Paper Support | Expected Impact | Difficulty |
-|-----------|--------------|-----------------|------------|
-| **Temperature/Platt calibration before meta-learner** | Guo et al. (1706.04599) | Medium — reduces false confidence in disagreements | Low |
-| **Visual Prompt Tuning (VPT)** | Jia et al. (2203.12119) | High — potentially less overfitting than full FT | Medium |
-| **SAM optimizer** | Foret et al. (2010.01412) | Medium — flatter minima, better generalization | Low |
-| **Conformal prediction for abstention** | Angelopoulos & Bates (2107.07511) | High — statistical guarantees on FP control | Medium |
-| **DeiT-style distillation** | Touvron et al. (2012.12877) | Medium — ConvNeXt teacher → DINOv2 student | Medium |
-| **Cross-validation meta-learner** | Wolpert (1992), Breiman (1996) | High — proper hold-out for fusion model | Low (we can reuse kfold splits) |
-| **Additional pretrained backbones** | ConvNeXt (2201.03545) | Low-Medium — data regime limits returns | Low |
-| **Scaling up unlabeled domain data** | MAE (2111.06377), Scaling ViT (2106.04560) | LOW — our MAE experiment suggests quality > quantity | High |
+### [WiSE-FT: Robust Fine-tuning of Zero-Shot Models](https://arxiv.org/abs/2109.01903) — CVPR 2022 (Wortsman et al., UW + OpenAI + Google)
+**Core insight:** Fine-tuning CLIP on downstream tasks improves in-distribution accuracy but destroys out-of-distribution (OOD) robustness. Simply interpolating (weighted average) between the fine-tuned and zero-shot models restores OOD performance with minimal in-distribution accuracy loss.
 
-### Rationale for Priority Ranking
+**Key contributions:**
+- **Weight Interpolation**: θ_WiSE = (1−α)·θ_zeroshot + α·θ_finetuned, with α tuned on validation
+- When α = 0.5, recovers most OOD robustness while retaining most accuracy gains from fine-tuning
+- The zero-shot model has complementary strengths: better on distribution shifts, worse on the specific downstream task
+- Works because the zero-shot image encoder and fine-tuned encoder share the same architecture (CLIP ViT)
+- Even a *linear interpolation* between two weight checkpoints dramatically improves robustness
 
-1. **Calibration + CV meta-learner** (highest priority): The two submitted candidates (hybrid verifier and kfold ensemble) both make binary decisions about model disagreements. A calibrated meta-learner trained on proper cross-validation folds would learn *systematic* bias patterns in each model, not just confidence thresholds. This directly addresses the 22-disagreement bottleneck.
+**Our application:** This directly applies to our ConvNeXt training. We observe strong overfitting (myval F1 peaks early then drops, while train loss continues to decline). WiSE-FT suggests:
+1. Keep a copy of the model at epoch 1-2 (best generalization)
+2. At the best myval epoch, interpolate: θ_best = 0.5·θ_early + 0.5·θ_myval_best
+3. This should preserve robustness from early training while gaining accuracy from later training
+4. We've effectively done this with our SWA-style averaging, but WiSE-FT gives a principled mixing ratio.
 
-2. **Conformal prediction**: Formal abstention guarantees where models disagree could reduce FPs without sacrificing recall. Especially relevant since top Kaggle entries likely use abstention strategies.
+### [Sigmoid Loss for Language Image Pre-Training (SigLIP)](https://arxiv.org/abs/2303.15343) — ICCV 2023 (Zhai et al., Google DeepMind)
+**Core insight:** The contrastive loss (CLIP) requires a large batch size because it operates on pairwise comparisons within the batch. Replacing it with a per-sample sigmoid loss over binary image-text matching removes the batch dependency, enabling better scaling with batch size and model size.
 
-3. **VPT + SAM**: Parameter-efficient tuning reduces overfitting risk (the #1 limiting factor), and SAM adds another regularization dimension. These are orthogonal improvements to ensemble construction.
+**Key contributions:**
+- Sigmoid loss: independently classify each image-text pair as match/non-match (no batch normalization of negatives)
+- Better performance at small batch sizes (critical for limited GPU memory)
+- Scales better with model size than contrastive loss
+- Enables efficient training with mismatched image/text batch sizes
+- Achieves SOTA zero-shot performance with smaller batches than CLIP
 
-4. **Scaling unlabeled domain data**: Our MAE failure suggests that more unlabeled data from the same domain won't help unless the data is of sufficient quality and diversity. The DINOv2 pretrained features are already strong.
+**Our application:** We used SigLIP as one of the frozen feature extractors in our early (failed) probe experiment. But SigLIP's core insight — per-sample loss removes batch dependency — is relevant to our fine-tuning: we could use SigLIP-pretrained backbones for tasks requiring small batch sizes (e.g., DINOv2 at 518px with batch_size=8).
+
+### [When and Why Vision-Language Models Behave Like Bags-of-Words](https://arxiv.org/abs/2210.01936) — ICLR 2023 (Yuksekgonul et al., Stanford)
+**Core insight:** CLIP and similar VLMs have a "bag-of-words" limitation: they struggle with compositional understanding (e.g., distinguishing "the dog chases the cat" from "the cat chases the dog"). This stems from the contrastive training objective's focus on coarse image-text alignment.
+
+**Key contributions:**
+- VLMs are systematically bad at attribute binding, relational understanding, and word order
+- The issue is fundamental to the contrastive pre-training paradigm
+- Fine-tuning on hard negative captions (negated attributes, swapped relations) can partially mitigate
+- But the limitation persists even after extensive fine-tuning
+
+**Our application:** This is less about our meteorite task (no text input) but is relevant for two reasons:
+1. CLIP-based models have systematic visual biases — certain visual features dominate others regardless of context
+2. This might explain why frozen CLIP features underperformed DINOv2 for our task: CLIP is optimized for text-image correspondence, not pure visual discrimination
+3. The paper suggests that SSL-only models (like DINOv2) may be better for fine-grained visual-only tasks than VLM models
 
 ---
 
-## Summary Table: Papers Reviewed
+## 5. Modern Self-Supervised Learning Foundations [NEW]
 
-| Paper | ID | Key Contribution | Relevance to Project |
-|-------|-----|-----------------|---------------------|
-| Model Soups | 2203.05482 | Weight averaging of fine-tuned models | Our soup baseline; kfold is next step |
-| SWA | 1803.05407 | Averaging along SGD trajectory finds wide minima | ConvNeXt soup uses this |
-| SAM | 2010.01412 | Optimize directly for flat minima | **Untried — high potential** |
-| Deep Ensembles | 1612.01474 | Simple model averaging for accuracy + calibration | Theoretical basis for kfold ensemble |
-| Model Calibration | 1706.04599 | Modern NNs are miscalibrated | **Must fix before meta-learner** |
-| DINOv2 | 2304.07193 | SSL foundation model for vision | Our second-best model (0.71962) |
-| ConvNeXt | 2201.03545 | Modernized ConvNet beats Transformers | Our SOTA backbone |
-| Swin Transformer | 2103.14030 | Hierarchical ViT with shifted windows | Not tried; potential third backbone |
-| Scaling ViT | 2106.04560 | ViT scaling laws; smaller model = better on small data | Explains DINOv2 Small > Base |
-| DeiT | 2012.12877 | Distillation for data-efficient ViTs | Potential teacher-student approach |
-| MAE | 2111.06377 | Masked autoencoding for SSL pretraining | Our domain-pretraining attempt failed |
-| VPT | 2203.12119 | Parameter-efficient ViT fine-tuning | **Untried — less overfitting** |
-| CLIP | 2103.00020 | Contrastive language-image pretraining | One backbone in early frozen probes |
-| Conformal Prediction | 2107.07511 | Distribution-free uncertainty quantification | Formal basis for our verifier approach |
+### [SimCLR: A Simple Framework for Contrastive Learning](https://arxiv.org/abs/2002.05709) — ICML 2020 (Chen et al., Google Brain)
+**Core insight:** Contrastive learning of visual representations requires three key ingredients: (1) a composition of strong data augmentations, (2) a learnable nonlinear projection head between representation and contrastive loss, and (3) large batch sizes.
+
+**Key contributions:**
+- **Data augmentation composition is critical**: random crop + color distortion + Gaussian blur gives best representations
+- **Projection head**: MLP that transforms representations before contrastive loss; discarded after training
+- Larger batch sizes (≥ 256) work better due to more negative samples
+- Longer training (≥ 1000 epochs) continues to improve linearly
+- Simpler architecture than MoCo (no memory bank) but requires large batch size
+
+**Our application:** SimCLR is a landmark paper that established the SSL paradigm we rely on. The key practical takeaway for our fine-tuning: **strong augmentation composition matters**. Our ConvNeXt training already uses RandAugment + Mixup + CutMix, following SimCLR's lesson that augmentation diversity is the most impactful hyperparameter.
+
+### [BYOL: Bootstrap Your Own Latent](https://arxiv.org/abs/2006.07733) — NeurIPS 2020 (Grill et al., DeepMind)
+**Core insight:** Contrastive learning doesn't require negative samples. BYOL trains an online network to predict the target network's representation of a different augmented view — and the target network is simply an exponential moving average (EMA) of the online network. No collapse occurs because the EMA acts as an implicit regularizer.
+
+**Key contributions:**
+- **No negative pairs needed**: online network predicts target representation via a predictor MLP
+- **Target network = EMA of online**: θ_target ← τ·θ_target + (1−τ)·θ_online
+- Collapse is avoided because the target network "lags behind" and provides stable, slowly-changing targets
+- Outperforms SimCLR while using smaller batch sizes (no need for many negatives)
+- Works with both ResNet and ViT architectures
+
+**Our application:** The EMA target network concept is directly relevant: our ConvNeXt soup could be reformulated as an EMA throughout training (not just at the end), potentially stabilizing training and reducing overfitting. EMA typically gives 0.5-1% improvement over best single checkpoint.
+
+### [MoCo v3: Self-Supervised Vision Transformers](https://arxiv.org/abs/2104.02057) — ICCV 2021 (Chen et al., FAIR)
+**Core insight:** Vision Transformers, despite lacking CNN inductive biases, can be effectively trained with self-supervised contrastive learning. However, ViTs exhibit training instability (spikes in loss) that requires careful handling (frozen patch projection, specific optimizer settings).
+
+**Key contributions:**
+- First systematic study of SSL for ViTs (MoCo v3 framework)
+- ViT-B/16 with MoCo v3 pre-training reaches 76.7% linear probing on ImageNet — competitive with supervised
+- **Instability problem**: ViT training with contrastive loss exhibits occasional "dips" in accuracy, caused by gradient spikes in the patch projection layer
+- **Solution**: freeze the patch projection layer during SSL pre-training
+- Larger ViTs (ViT-L, ViT-H) benefit more from SSL pre-training than smaller ones
+
+**Our application:** When fine-tuning DINOv2 ViT, we observed unstable training (erratic validation F1). MoCo v3's insight suggests that freezing the patch embedding layer during the early epochs of fine-tuning might stabilize training — and we should consider using a smaller learning rate for the patch embedding than the rest of the model.
+
+---
+
+## 6. Parameter-Efficient & Calibrated Fine-Tuning [NEW]
+
+### [AdaptFormer: Adapting Vision Transformers for Scalable Visual Recognition](https://arxiv.org/abs/2205.13535) — NeurIPS 2022 (Chen et al., HKU + Tencent)
+**Core insight:** Instead of full fine-tuning or adding prompts (VPT), insert lightweight bottleneck modules (AdaptMLP) in parallel to the FFN layers of a frozen ViT. This achieves better accuracy than VPT with comparable parameter efficiency.
+
+**Key contributions:**
+- **AdaptMLP**: Down-project → ReLU → Up-project bottleneck placed parallel to ViT's MLP block
+- Combines with original features via learnable scaling factor
+- Outperforms VPT on video action recognition and image classification benchmarks
+- ~1% extra parameters but matches or exceeds full fine-tuning
+- The parallel design is key: adapts features that the frozen backbone *missed*, rather than replacing backbone features
+
+**Our application:** AdaptFormer is more powerful than VPT because it operates on intermediate features, not just input tokens. For our meteorite classification:
+1. Freeze DINOv2 Small backbone → only train AdaptMLP modules (~0.2M params)
+2. This prevents catastrophic forgetting of pretrained features while learning domain-specific patterns
+3. **Untried direction with high potential** — combines the regularization benefits of frozen backbone with the expressive power of learned adaptation
+
+### [ConvNeXt V2: Co-designing ConvNets with Masked Autoencoders](https://arxiv.org/abs/2301.00808) — CVPR 2023 (Woo et al., KAIST + Meta AI)
+**Core insight:** Masked autoencoders (MAE) designed for ViTs don't work well when naively applied to ConvNets due to "feature collapse." ConvNeXt V2 introduces Fully Convolutional MAE (FCMAE) and Global Response Normalization (GRN) to make MAE work for ConvNets.
+
+**Key contributions:**
+- **FCMAE**: Sparse convolution-based masking (only processes unmasked pixels, unlike ViT which needs mask tokens)
+- **GRN**: New normalization layer that prevents feature collapse in ConvNet MAE training
+- ConvNeXt V2 + FCMAE pre-training achieves state-of-the-art among ConvNet architectures
+- The co-design principle: architecture and pre-training method must evolve together
+
+**Our application:** ConvNeXt V2 is directly relevant for future iterations:
+1. Upgrading from ConvNeXt V1 to V2 backbone would likely give a direct accuracy boost
+2. The GRN normalization layer specifically addresses overfitting in small-data regimes by preventing feature collapse
+3. **Low-effort upgrade**: simply swapping `convnext_tiny` for `convnextv2_tiny` in our pipeline
+4. However, timm may not have ConvNeXt V2 weights readily available — need to check
+
+---
+
+## 7. Updated Recommendations (All Papers Considered)
+
+### Tier 1: High Impact, Low Difficulty
+| Technique | Papers | What We'd Do | Expected Gain |
+|-----------|--------|-------------|---------------|
+| **Semi-supervised with Noisy Student** | Noisy Student (1911.04252), Rethinking PT/ST (2006.06882) | Teacher → pseudo-label 8600 mytest → train student with noise | **+2-4% F1** |
+| **WiSE-FT interpolation** | WiSE-FT (2109.01903) | Interpolate early-epoch (best gen) + late-epoch (best acc) weights | **+0.5-1.5% F1** |
+| **TIES-Merging k-fold models** | TIES-Merging (2306.01708), Git Re-Basin (2209.04836) | Merge 5 fold checkpoints into 1 model via TIES | **+0.5-1% F1** + no ensemble cost |
+| **TENT test-time adaptation** | TENT (2006.10726) | Adapt BN stats on mytest images, then predict on test | **+1-2% F1** (bridges myval→test gap) |
+
+### Tier 2: Medium Impact, Medium Difficulty
+| Technique | Papers | What We'd Do | Expected Gain |
+|-----------|--------|-------------|---------------|
+| **Model calibration + meta-learner** | Guo et al. (1706.04599), Wolpert (1992) | Platt-scale both models, then meta-learn on kfold val | **+1-2% F1** |
+| **AdaptFormer on DINOv2** | AdaptFormer (2205.13535) | Freeze DINOv2, train AdaptMLP modules only | **+0.5-1.5% F1** |
+| **SAM optimizer** | SAM (2010.01412) | Replace AdamW with SAM for ConvNeXt fine-tuning | **+0.3-0.8% F1** |
+| **ConvNeXt V2 upgrade** | ConvNeXt V2 (2301.00808) | Swap backbone to convnextv2_tiny | **+0.3-0.5% F1** |
+
+### Tier 3: High Risk / Speculative
+| Technique | Papers | Challenge |
+|-----------|--------|-----------|
+| **Task arithmetic editing** | Task Arithmetic (2212.04089) | Useful for multi-task but we have binary classification — limited benefit |
+| **ZipIt! cross-task merging** | ZipIt! (2305.03053) | Our models share the same task, so simpler merging (TIES) is better |
+| **FixMatch semi-supervised** | FixMatch (2001.07685) | Requires i.i.d. assumption between labeled and unlabeled — mytest ≠ train |
+| **Test-Time Training** | TTT (1909.13231) | Computationally expensive; TENT is simpler and sufficient |
+
+### Key Insight from Literature Synthesis
+
+The papers collectively suggest a **pipeline** rather than isolated tricks:
+
+1. **Train** with SAM on ConvNeXt V2 backbone → best single model
+2. **Apply WiSE-FT** interpolation → balance accuracy vs robustness
+3. **Pseudo-label** mytest via Noisy Student self-training → leverage unlabeled data
+4. **TENT adaptation** on mytest → reduce distribution shift at inference
+5. **TIES-Merge** k-fold checkpoints → single model with ensemble benefits
+6. **Conformal calibration** → control FP rate with statistical guarantees
+
+The gap to 0.80 F1 likely requires *all* of these — not any one alone — combined with the ensemble diversity we've already built.
+
+---
+
+## 8. Summary Table: All Papers Reviewed (25 Papers)
+
+| Paper | ID | Venue | Key Contribution | Our Status |
+|-------|-----|-------|-----------------|------------|
+| **Model Merging** ||||
+| Model Soups | 2203.05482 | ICML 2022 | Weight averaging of fine-tuned models | **Used** (soup baseline) |
+| SWA | 1803.05407 | UAI 2018 | Averaging along SGD trajectory | **Used** (soup variant) |
+| Git Re-Basin | 2209.04836 | ICLR 2023 | Permutation symmetry enables cross-run merging | Untried |
+| TIES-Merging | 2306.01708 | NeurIPS 2023 | Resolve interference when merging task vectors | **Untried, high priority** |
+| Task Arithmetic | 2212.04089 | ICLR 2024 | Add/subtract task vectors to edit models | Untried (speculative) |
+| ZipIt! | 2305.03053 | ICLR 2024 | Merge models from different tasks without training | Not applicable |
+| **Semi-Supervised Learning** ||||
+| FixMatch | 2001.07685 | NeurIPS 2020 | Simple SSL with confidence thresholding | Untried (i.i.d. concern) |
+| Noisy Student | 1911.04252 | NeurIPS 2020 | Self-training with noise beats teacher | **Untried, high priority** |
+| Rethinking PT & ST | 2006.06882 | NeurIPS 2020 | Pre-training + self-training are complementary | Contextual insight |
+| **Test-Time & Robustness** ||||
+| TENT | 2006.10726 | ICLR 2021 | Test-time entropy minimization for BN layers | **Untried, high priority** |
+| Test-Time Training | 1909.13231 | ICML 2020 | Self-supervision at test time for adaptation | Untried (complex) |
+| WiSE-FT | 2109.01903 | CVPR 2022 | Interpolate zero-shot + fine-tuned weights | **Untried, high priority** |
+| Bag-of-Words VLMs | 2210.01936 | ICLR 2023 | CLIP has compositional reasoning failures | Insight (explains CLIP gap) |
+| **Self-Supervised Learning** ||||
+| SimCLR | 2002.05709 | ICML 2020 | Contrastive learning with strong augmentations | Background |
+| BYOL | 2006.07733 | NeurIPS 2020 | SSL without negative samples (EMA target) | EMA concept useful |
+| MoCo v3 | 2104.02057 | ICCV 2021 | ViT self-supervised training instability | Explains DINOv2 instability |
+| DINOv2 | 2304.07193 | TMLR 2024 | SSL foundation model for vision | **Used** (SOTA model) |
+| MAE | 2111.06377 | CVPR 2022 | Masked autoencoding for SSL | **Tried** (failed) |
+| SigLIP | 2303.15343 | ICCV 2023 | Sigmoid loss enables small-batch contrastive pretraining | Background |
+| **Fine-Tuning Strategies** ||||
+| DeiT | 2012.12877 | ICML 2021 | Distillation for data-efficient ViTs | Untried (teacher-student) |
+| Scaling ViT | 2106.04560 | ICML 2022 | ViT scaling laws; small model optimal for small data | Explains DINOv2 Small > Base |
+| VPT | 2203.12119 | ECCV 2022 | Learnable prompts for frozen ViT adaptation | Untried |
+| AdaptFormer | 2205.13535 | NeurIPS 2022 | Bottleneck adapters for frozen ViTs | **Untried, promising** |
+| ConvNeXt V2 | 2301.00808 | CVPR 2023 | FCMAE + GRN for ConvNet self-supervised learning | **Untried, easy upgrade** |
+| **Evaluation & Theory** ||||
+| Deep Ensembles | 1612.01474 | NeurIPS 2017 | Model averaging for accuracy + calibration | **Used** (kfold theory) |
+| Model Calibration | 1706.04599 | ICML 2017 | Modern NNs are miscalibrated | **Must fix before fusion** |
+| SAM | 2010.01412 | ICLR 2021 | Optimize for flat minima directly | Untried |
+| Conformal Prediction | 2107.07511 | Book 2022 | Distribution-free prediction sets | Untried |
+| **Architecture** ||||
+| ConvNeXt | 2201.03545 | CVPR 2022 | Modernized ConvNet beats ViT | **Used** (SOTA backbone) |
+| Swin Transformer | 2103.14030 | ICCV 2021 | Hierarchical ViT with shifted windows | Not tried |
+| CLIP | 2103.00020 | ICML 2021 | Contrastive language-image pretraining | **Used** (frozen probes, failed) |
+
+---
+
+## Appendix: Our Experimental Results in Context
+
+| Experiment | Result | Literature Explanation |
+|------------|--------|------------------------|
+| Frozen probe (SigLIP+CLIP+DINOv2 → MLP) | test 0.682 (failed) | VPT/AdaptFormer papers: frozen *features* ≠ frozen *attention*. Probing only captures what's in the [CLS] token; adaptation inside the Transformer (prompts/adapters) is far more expressive. |
+| MAE domain pretraining on 9k images | myval 0.564 (regression) | MAE paper: requires large-scale pretraining. 9k images destroy ImageNet priors without replacing them. |
+| DINOv2 Small > DINOv2 Base | test 0.7196 > 0.7070 | Scaling ViT: optimal model size depends on data quantity. We are on the left side of the curve. |
+| K-fold ensemble (5 ConvNeXt + DINOv2) | 126 pos, 28 diffs | Deep Ensembles + Krogh-Vedelsby: diversity from data splits creates complementary errors. |
+| Verifier-guided hybrid | 124 pos, 4 diffs | Conformal-like: risk-scored flipping is an ad-hoc implementation of prediction set adjustment. |
+| Meta-learner on myval | Conservative (104 pos) | Calibration paper: uncalibrated probabilities + distribution shift = systematic bias in meta-learner decisions. |
+| Myval ≠ test distribution | ~0.68 myval vs 0.72 test | WiSE-FT: fine-tuning destroys OOD robustness; myval is OOD relative to the fine-tuned model. TENT could help. |
