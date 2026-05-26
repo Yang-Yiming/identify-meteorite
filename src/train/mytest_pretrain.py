@@ -2,7 +2,7 @@
 """Pretrain ConvNeXt Tiny backbone on mytest dataset, then export for finetuning.
 
 Usage:
-  python mytest_pretrain.py --mytest-root ../mytest --output-dir ./outputs/mytest_pretrain [train_args...]
+  python mytest_pretrain.py --mytest-root ../../mytest --output-dir ./outputs/mytest_pretrain [train_args...]
 """
 
 import argparse
@@ -140,7 +140,7 @@ def run_epoch(
 
 def parse_args():
     parser = argparse.ArgumentParser(description="mytest pretraining")
-    parser.add_argument("--mytest-root", type=Path, default=Path("../mytest"))
+    parser.add_argument("--mytest-root", type=Path, default=Path("../../mytest"))
     parser.add_argument("--output-dir", type=Path, default=Path("./outputs/mytest_pretrain"))
     parser.add_argument("--backbone", type=str, default="convnext_tiny")
     parser.add_argument("--backbone-checkpoint", type=Path, default=None)

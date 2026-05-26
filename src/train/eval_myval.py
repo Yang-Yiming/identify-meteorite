@@ -21,9 +21,9 @@ from utils import DEFAULT_BACKBONE, DEFAULT_MEAN, DEFAULT_STD, normalize_image_s
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate checkpoint on myval")
     parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--myval-root", type=Path, default=Path("../data/myval"))
+    parser.add_argument("--myval-root", type=Path, default=Path("../../data/myval"))
     parser.add_argument("--labels-csv", type=Path, default=None)
-    parser.add_argument("--mask-dir", type=Path, default=Path("../mask"))
+    parser.add_argument("--mask-dir", type=Path, default=Path("../../mask"))
     parser.add_argument("--mask-split", type=str, default="myval")
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--num-workers", type=int, default=4)

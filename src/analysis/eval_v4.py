@@ -85,20 +85,20 @@ def main():
 
     # Checkpoints with known test F1
     checkpoints = [
-        ("soup_reduced_notstone", Path("train/outputs/myval_v13_hi288_seed42_soup/soup.pt"), 0.71962),
-        ("mytest_strict_dino_v1", Path("train/outputs/mytest_strict_dino_v1/best.pt"), None),
-        ("mytest_split_protocol", Path("train/outputs/mytest_v1_s42/best.pt"), 0.65979),
-        ("mytest_pretrain_finetune", Path("train/outputs/mytest_pretrain_finetune_v2/best.pt"), 0.55214),
-        ("mytest_augment_soup", Path("train/outputs/mytest_augment_v2/soup_top3.pt"), 0.67021),
-        ("splitval_augment_soup", Path("train/outputs/splitval_augment_v1/soup_top3.pt"), 0.63212),
+        ("soup_reduced_notstone", Path("../train/outputs/myval_v13_hi288_seed42_soup/soup.pt"), 0.71962),
+        ("mytest_strict_dino_v1", Path("../train/outputs/mytest_strict_dino_v1/best.pt"), None),
+        ("mytest_split_protocol", Path("../train/outputs/mytest_v1_s42/best.pt"), 0.65979),
+        ("mytest_pretrain_finetune", Path("../train/outputs/mytest_pretrain_finetune_v2/best.pt"), 0.55214),
+        ("mytest_augment_soup", Path("../train/outputs/mytest_augment_v2/soup_top3.pt"), 0.67021),
+        ("splitval_augment_soup", Path("../train/outputs/splitval_augment_v1/soup_top3.pt"), 0.63212),
     ]
 
     # New v4 datasets
     datasets = {
-        "v3_cluster": Path("analysis/testlike_dino_myval_v3/test_like_val_cluster.csv"),
-        "v3_top": Path("analysis/testlike_dino_myval_v3/test_like_val_top.csv"),
-        "v4_cluster": Path("analysis/testlike_dino_train_v4/test_like_val_cluster.csv"),
-        "v4_top": Path("analysis/testlike_dino_train_v4/test_like_val_top.csv"),
+        "v3_cluster": Path("evaluation/testlike_dino_myval_v3/test_like_val_cluster.csv"),
+        "v3_top": Path("evaluation/testlike_dino_myval_v3/test_like_val_top.csv"),
+        "v4_cluster": Path("evaluation/testlike_dino_train_v4/test_like_val_cluster.csv"),
+        "v4_top": Path("evaluation/testlike_dino_train_v4/test_like_val_top.csv"),
     }
 
     results = []
@@ -141,9 +141,9 @@ def main():
         else:
             print(f"Rank correlation {ds_name}: N/A (too few points)")
 
-    results_df.to_csv("analysis/testlike_v4_eval/v4_eval_results.csv", index=False)
+    results_df.to_csv("evaluation/testlike_v4_eval/v4_eval_results.csv", index=False)
 
 
 if __name__ == "__main__":
-    Path("analysis/testlike_v4_eval").mkdir(parents=True, exist_ok=True)
+    Path("evaluation/testlike_v4_eval").mkdir(parents=True, exist_ok=True)
     main()

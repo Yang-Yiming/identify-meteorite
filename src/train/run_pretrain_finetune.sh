@@ -11,7 +11,7 @@ FINETUNE_OUTPUT="${SCRIPT_DIR}/outputs/mytest_pretrain_finetune"
 
 echo "=== Stage 1: mytest pretrain ==="
 python "${SCRIPT_DIR}/mytest_pretrain.py" \
-    --mytest-root "${SCRIPT_DIR}/../mytest" \
+    --mytest-root "${SCRIPT_DIR}/../../mytest" \
     --output-dir "${PRETRAIN_OUTPUT}" \
     --backbone convnext_tiny \
     --image-size 288 \
@@ -39,9 +39,9 @@ python "${SCRIPT_DIR}/train_finetune.py" \
     --backbone convnext_tiny \
     --backbone-checkpoint "${PRETRAIN_OUTPUT}/best.pt" \
     --output-dir "${FINETUNE_OUTPUT}" \
-    --val-root ../data/myval \
+    --val-root ../../data/myval \
     --val-mask-split myval \
-    --mask-dir ../mask \
+    --mask-dir ../../mask \
     --image-size 288 \
     --label-smoothing 0.1 \
     --cutmix-alpha 0.7 \

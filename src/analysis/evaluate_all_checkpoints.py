@@ -116,11 +116,11 @@ def discover_checkpoints(base_dir: Path) -> list[tuple[str, Path]]:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manifest", type=Path, default=Path("analysis/testlike_dino_myval_v3/manifest.csv"))
-    parser.add_argument("--cluster-val", type=Path, default=Path("analysis/testlike_dino_myval_v3/test_like_val_cluster.csv"))
-    parser.add_argument("--top-val", type=Path, default=Path("analysis/testlike_dino_myval_v3/test_like_val_top.csv"))
+    parser.add_argument("--manifest", type=Path, default=Path("evaluation/testlike_dino_myval_v3/manifest.csv"))
+    parser.add_argument("--cluster-val", type=Path, default=Path("evaluation/testlike_dino_myval_v3/test_like_val_cluster.csv"))
+    parser.add_argument("--top-val", type=Path, default=Path("evaluation/testlike_dino_myval_v3/test_like_val_top.csv"))
     parser.add_argument("--outputs-dir", type=Path, default=Path("train/outputs"))
-    parser.add_argument("--out-dir", type=Path, default=Path("analysis/all_checkpoints_eval"))
+    parser.add_argument("--out-dir", type=Path, default=Path("../evaluation/all_checkpoints_eval"))
     parser.add_argument("--batch-size", type=int, default=96)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")

@@ -363,7 +363,7 @@ without importing the full mytest domain shift.
 
 ### Data
 
-Used the strict candidates from `analysis/mytest_audit_dino_v1`:
+Used the strict candidates from `evaluation/mytest_audit_dino_v1`:
 
 - total: 161
 - label 0: 130
@@ -374,7 +374,7 @@ Used the strict candidates from `analysis/mytest_audit_dino_v1`:
 The filtered root was materialized as symlinks under:
 
 ```text
-analysis/mytest_audit_dino_v1/filtered_roots/strict
+evaluation/mytest_audit_dino_v1/filtered_roots/strict
 ```
 
 ### Training

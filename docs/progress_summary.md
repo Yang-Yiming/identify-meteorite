@@ -65,9 +65,9 @@ conservative and does not improve the available diagnostics.
 
 ```bash
 python analysis/evaluate_testlike_proxy.py \
-  --manifest analysis/testlike_dino_train_v4/manifest.csv \
-  --cluster-val analysis/testlike_dino_train_v4/test_like_val_cluster.csv \
-  --top-val analysis/testlike_dino_train_v4/test_like_val_top.csv \
+  --manifest evaluation/testlike_dino_train_v4/manifest.csv \
+  --cluster-val evaluation/testlike_dino_train_v4/test_like_val_cluster.csv \
+  --top-val evaluation/testlike_dino_train_v4/test_like_val_top.csv \
   --device cuda --batch-size 128
 ```
 
@@ -80,8 +80,8 @@ Current V4 diagnostic baseline:
 | `mytest_pretrain_finetune` | 0.8725 | 0.9487 | 0.55214 |
 
 Reference files:
-- `analysis/testlike_dino_train_v4/` — V4 dataset
-- `analysis/testlike_v4_eval/v4_eval_results.csv` — evaluation results
+- `evaluation/testlike_dino_train_v4/` — V4 dataset
+- `evaluation/testlike_v4_eval/v4_eval_results.csv` — evaluation results
 
 ### myval 不可靠性证据
 
@@ -90,7 +90,7 @@ Reference files:
 | dinov2 mlp | +0.0234 | -0.0103 | ❌ 方向反转 |
 | mytest augment soup | +0.0437 | -0.0284 | ❌ 方向反转 |
 | mytest pretrain→finetune | +0.0107 | -0.1464 | ❌ 严重反转 |
-- `analysis/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.md`
+- `evaluation/testlike_dino_myval_v3_eval_with_strict/proxy_eval_summary.md`
 
 ## mytest Generalization Failure
 

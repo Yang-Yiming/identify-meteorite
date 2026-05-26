@@ -1,5 +1,6 @@
 .venv
 __pycache__
+src/train/outputs/
 output*
 data
 mask
@@ -8,6 +9,7 @@ preprocess/data-analysis/*.png
 preprocess/data-analysis/*.json
 preprocess/bbox*
 *cache
-my-autoresearch
 mytest
-analysis/mytest_audit_dino_v1/filtered_roots
+evaluation/mytest_audit_dino_v1/filtered_roots
+my-autoresearch/
+README.md

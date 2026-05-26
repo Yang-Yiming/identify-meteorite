@@ -16,7 +16,7 @@ from tta import predict_probabilities_with_tta, resolve_tta_views
 from utils import DEFAULT_BACKBONE, DEFAULT_MEAN, DEFAULT_STD, normalize_image_size, normalize_stats
 
 
-DEFAULT_DATA_DIR = Path("../data")
+DEFAULT_DATA_DIR = Path("../../data")
 DEFAULT_TEST_IMAGES_DIR = DEFAULT_DATA_DIR / "test_images"
 DEFAULT_SAMPLE_SUBMISSION = DEFAULT_DATA_DIR / "sample_submission.csv"
 DEFAULT_OUTPUT_CSV = Path("./output.csv")
@@ -167,7 +167,7 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Disable mask inference and run on original test images",
     )
-    parser.add_argument("--mask-dir", type=Path, default=Path("../mask"), help="Directory containing mask images")
+    parser.add_argument("--mask-dir", type=Path, default=Path("../../mask"), help="Directory containing mask images")
     parser.add_argument("--flip-mask", action="store_true", help="Invert mask: keep only background, remove meteorite area")
     return parser.parse_args()
 

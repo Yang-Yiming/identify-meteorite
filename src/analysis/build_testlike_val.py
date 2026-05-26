@@ -8,7 +8,7 @@ lightweight image statistics to create a reproducible baseline proxy:
 - grayscale thumbnail shape/layout
 - edge and texture-grid summaries
 
-Outputs are written under analysis/testlike/ by default.
+Outputs are written under evaluation/testlike/ by default.
 """
 
 from __future__ import annotations
@@ -286,8 +286,8 @@ def main() -> None:
     parser.add_argument("--myval-crop-dir", type=Path, default=Path("preprocess/bbox_crop/myval"))
     parser.add_argument("--test-crop-dir", type=Path, default=Path("preprocess/bbox_crop/test"))
     parser.add_argument("--mytest-root", type=Path, default=Path("mytest"))
-    parser.add_argument("--not-stone-txt", type=Path, default=Path("post_process/not-stone_best_071962.txt"))
-    parser.add_argument("--out-dir", type=Path, default=Path("analysis/testlike"))
+    parser.add_argument("--not-stone-txt", type=Path, default=Path("post_process/force_zero_lists/not-stone_best_071962.txt"))
+    parser.add_argument("--out-dir", type=Path, default=Path("evaluation/testlike"))
     parser.add_argument("--clusters", type=int, default=24)
     parser.add_argument("--top-n", type=int, default=400)
     parser.add_argument("--top-k", type=int, default=10)

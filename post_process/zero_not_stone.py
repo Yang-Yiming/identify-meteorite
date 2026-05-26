@@ -30,7 +30,7 @@ def main():
     parser = argparse.ArgumentParser(description="Zero out predictions for not-stone images")
     parser.add_argument("--input-csv", type=Path, required=True, help="Input submission CSV")
     parser.add_argument("--output-csv", type=Path, required=True, help="Output submission CSV")
-    parser.add_argument("--not-stone-txt", type=Path, default=Path(__file__).parent / "not-stone.txt")
+    parser.add_argument("--not-stone-txt", type=Path, default=Path(__file__).parent / "force_zero_lists/not-stone.txt")
     args = parser.parse_args()
 
     not_stone_set = load_not_stone_ids(args.not_stone_txt.resolve())

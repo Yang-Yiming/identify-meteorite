@@ -17,7 +17,7 @@ from analysis.build_testlike_val import build_manifest, extract_dino_timm_featur
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out-dir", type=Path, default=Path("analysis/mytest_audit"))
+    parser.add_argument("--out-dir", type=Path, default=Path("evaluation/mytest_audit"))
     parser.add_argument("--dino-model", type=str, default="vit_base_patch14_dinov2")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -34,7 +34,7 @@ def main() -> None:
         myval_crop_dir=Path("preprocess/bbox_crop/myval"),
         test_crop_dir=Path("preprocess/bbox_crop/test"),
         mytest_root=Path("mytest"),
-        not_stone_txt=Path("post_process/not-stone_best_071962.txt"),
+        not_stone_txt=Path("post_process/force_zero_lists/not-stone_best_071962.txt"),
     ))
     manifest.to_csv(args.out_dir / "manifest.csv", index=False)
 

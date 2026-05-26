@@ -15,7 +15,7 @@ Default behavior matches the user's request:
 
 Example:
     python detect_keyword.py \
-        --input_dir ../data/test_images \
+        --input_dir ../../data/test_images \
         --output_txt ./keyword_positive.txt \
         --keywords "陨石,meteorite,meteorit"
 
@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
         "--input_dir",
         type=str,
         default=str(default_input_dir),
-        help="Directory containing test images. Default: ../data/test_images",
+        help="Directory containing test images. Default: ../../data/test_images",
     )
     parser.add_argument(
         "--output_txt",

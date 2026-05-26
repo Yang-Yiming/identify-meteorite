@@ -100,9 +100,9 @@ def best_threshold(probs, labels):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cluster-val", type=Path, default=Path("analysis/testlike_dino_myval_v3/test_like_val_cluster.csv"))
-    parser.add_argument("--top-val", type=Path, default=Path("analysis/testlike_dino_myval_v3/test_like_val_top.csv"))
-    parser.add_argument("--out-dir", type=Path, default=Path("analysis/ensemble_search"))
+    parser.add_argument("--cluster-val", type=Path, default=Path("evaluation/testlike_dino_myval_v3/test_like_val_cluster.csv"))
+    parser.add_argument("--top-val", type=Path, default=Path("evaluation/testlike_dino_myval_v3/test_like_val_top.csv"))
+    parser.add_argument("--out-dir", type=Path, default=Path("../evaluation/ensemble_search"))
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")

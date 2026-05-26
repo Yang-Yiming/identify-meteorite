@@ -234,11 +234,11 @@ def markdown_table(df: pd.DataFrame, floatfmt: str = ".4f") -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manifest", type=Path, default=Path("analysis/testlike_dino_train_v4/manifest.csv"))
-    parser.add_argument("--cluster-val", type=Path, default=Path("analysis/testlike_dino_train_v4/test_like_val_cluster.csv"))
-    parser.add_argument("--top-val", type=Path, default=Path("analysis/testlike_dino_train_v4/test_like_val_top.csv"))
+    parser.add_argument("--manifest", type=Path, default=Path("evaluation/testlike_dino_train_v4/manifest.csv"))
+    parser.add_argument("--cluster-val", type=Path, default=Path("evaluation/testlike_dino_train_v4/test_like_val_cluster.csv"))
+    parser.add_argument("--top-val", type=Path, default=Path("evaluation/testlike_dino_train_v4/test_like_val_top.csv"))
     parser.add_argument("--dataset-prefix", type=str, default="dino_v4")
-    parser.add_argument("--out-dir", type=Path, default=Path("analysis/testlike_v4_eval"))
+    parser.add_argument("--out-dir", type=Path, default=Path("evaluation/testlike_v4_eval"))
     parser.add_argument("--batch-size", type=int, default=96)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")

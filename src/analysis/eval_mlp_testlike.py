@@ -39,7 +39,7 @@ def main():
 
     # Load scaler and MLP
     scaler = StandardScaler()
-    features = np.load("train/outputs/dinov2_mlp/features.npz")
+    features = np.load("../train/outputs/dinov2_mlp/features.npz")
     scaler.fit(features["train_feats"])
 
     # MLPClassifier
@@ -54,7 +54,7 @@ def main():
         def forward(self, x): return self.net(x)
 
     mlp = MLPClassifier(768).to(device)
-    mlp.load_state_dict(torch.load("train/outputs/dinov2_mlp_v2/mlp_best.pt", map_location="cpu"))
+    mlp.load_state_dict(torch.load("../train/outputs/dinov2_mlp_v2/mlp_best.pt", map_location="cpu"))
     mlp.eval()
 
     def infer(paths):
@@ -77,8 +77,8 @@ def main():
 
     results = []
     for ds_name, ds_path in [
-        ("testlike_cluster", "analysis/testlike_dino_myval_v3/test_like_val_cluster.csv"),
-        ("testlike_top", "analysis/testlike_dino_myval_v3/test_like_val_top.csv"),
+        ("testlike_cluster", "evaluation/testlike_dino_myval_v3/test_like_val_cluster.csv"),
+        ("testlike_top", "evaluation/testlike_dino_myval_v3/test_like_val_top.csv"),
     ]:
         df = pd.read_csv(ds_path)
         labels = df["label"].astype(int).to_numpy()
@@ -88,7 +88,7 @@ def main():
         results.append({"dataset": ds_name, "f1_at_0_5": f1, "n_pos": n_pos, "prob_mean": float(probs.mean())})
 
     # Also evaluate on myval_masked for comparison
-    manifest = pd.read_csv("analysis/testlike_dino_myval_v3/manifest.csv")
+    manifest = pd.read_csv("evaluation/testlike_dino_myval_v3/manifest.csv")
     myval_masked = manifest[(manifest["source"] == "myval") & (manifest["has_image"])].copy()
     myval_probs = infer(myval_masked["path"].tolist())
     myval_labels = myval_masked["label"].astype(int).to_numpy()
@@ -97,7 +97,7 @@ def main():
 
     results_df = pd.DataFrame(results)
     print(results_df.to_string(index=False))
-    results_df.to_csv("train/outputs/dinov2_mlp_v2/testlike_v3_eval.csv", index=False)
+    results_df.to_csv("../train/outputs/dinov2_mlp_v2/testlike_v3_eval.csv", index=False)
 
 
 if __name__ == "__main__":

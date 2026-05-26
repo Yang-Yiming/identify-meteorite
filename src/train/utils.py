@@ -8,7 +8,7 @@ import torch
 from wandb_utils import add_wandb_args
 
 DEFAULT_BACKBONE = "convnext_tiny"
-DEFAULT_DATA_DIR = Path("../data")
+DEFAULT_DATA_DIR = Path("../../data")
 DEFAULT_LABELS_CSV = DEFAULT_DATA_DIR / "train_labels.csv"
 DEFAULT_VAL_ROOT = DEFAULT_DATA_DIR / "myval"
 DEFAULT_VAL_MASK_SPLIT = "myval"
@@ -43,7 +43,7 @@ def parse_args() -> argparse.Namespace:
         "--val-root",
         type=Path,
         default=DEFAULT_VAL_ROOT,
-        help="Root directory for external validation labels. Defaults to ../data/myval.",
+        help="Root directory for external validation labels. Defaults to ../../data/myval.",
     )
     parser.add_argument(
         "--val-labels-csv",
@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
         "--mytest-root",
         type=Path,
         default=None,
-        help="Optional clean external dataset root with meteorite/ and rock/ subdirs, e.g. ../mytest.",
+        help="Optional clean external dataset root with meteorite/ and rock/ subdirs, e.g. ../../mytest.",
     )
     parser.add_argument(
         "--mytest-val-ratio",
@@ -111,7 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mask-dir",
         type=Path,
-        default=Path("../mask"),
+        default=Path("../../mask"),
         help="Directory containing SAM mask images, e.g. train/, myval/, test/.",
     )
     parser.add_argument("--epochs", type=int, default=5)

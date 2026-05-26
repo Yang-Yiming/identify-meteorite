@@ -12,7 +12,7 @@ import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 
 
-DEFAULT_DATA_DIR = Path("../data")
+DEFAULT_DATA_DIR = Path("../../data")
 DEFAULT_LABELS_CSV = DEFAULT_DATA_DIR / "train_labels.csv"
 DEFAULT_TEST_IMAGES_DIR = DEFAULT_DATA_DIR / "test_images"
 DEFAULT_SAMPLE_SUBMISSION = DEFAULT_DATA_DIR / "sample_submission.csv"
