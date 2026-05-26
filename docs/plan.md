@@ -19,8 +19,22 @@ frequently correspond to test regressions (dinov2 mlp: myval +0.023, test -0.010
 mytest augment: myval +0.044, test -0.028; etc).
 
 The V4 diagnostic dataset is at:
-`analysis/testlike_dino_train_v4/`
+`evaluation/testlike_dino_train_v4/`
 Evaluation script: `analysis/evaluate_testlike_proxy.py` (now defaults to V4).
+
+## Diagnostic Findings (2026-05-26)
+
+**Core problem: False positives dominate by 3.3×.** Error diagnostic on the SOTA soup model reveals:
+- **Test predicts 68% positive** (132/194) — far above ~20% expected (Phase 1 was 4:1 neg:pos)
+- **Myval FP rate = 39.2%** (73/186), **FN rate = 15.1%** (22/146)
+- **35/73 FPs have prob > 0.9** — model is confidently wrong, not a calibration issue
+- Optimal threshold on myval only shifts from 0.5 to 0.5366 → tiny benefit, confirming the issue is in model discrimination, not threshold
+
+**V4 proxy is saturated** — SOTA achieves F1=0.9937 (cluster) / 1.0 (top). Cannot discriminate top models. A V5 proxy is needed.
+
+**Testlike V4 rank correlation remains strong** (ρ=+0.94 top) for ranking across runs, but all top models now cluster near F1=1.0.
+
+See `analysis/diagnostic_error_analysis/diagnostic_report.md` for details.
 
 ## Current State
 
@@ -84,11 +98,11 @@ For every new run, report at least:
 
    ```bash
    python analysis/evaluate_testlike_proxy.py \
-     --manifest analysis/testlike_dino_myval_v3/manifest.csv \
-     --cluster-val analysis/testlike_dino_myval_v3/test_like_val_cluster.csv \
-     --top-val analysis/testlike_dino_myval_v3/test_like_val_top.csv \
+     --manifest evaluation/testlike_dino_myval_v3/manifest.csv \
+     --cluster-val evaluation/testlike_dino_myval_v3/test_like_val_cluster.csv \
+     --top-val evaluation/testlike_dino_myval_v3/test_like_val_top.csv \
      --dataset-prefix <run_tag> \
-     --out-dir analysis/testlike_<run_tag>_eval \
+     --out-dir evaluation/testlike_<run_tag>_eval \
      --device cuda \
      --batch-size 128 \
      --num-workers 4
@@ -118,7 +132,7 @@ Current soup baseline in the DINO diagnostic:
 ## Next Directions
 
 1. **Use DINO test-like diagnostics for every experiment.**
-   `analysis/testlike_dino_myval_v3` is the current diagnostic set. It is not a
+   `evaluation/testlike_dino_myval_v3` is the current diagnostic set. It is not a
    perfect final judge, but it is better than hard train-heavy test-like lists
    and should be reported for every new checkpoint.
 
@@ -143,8 +157,8 @@ Current soup baseline in the DINO diagnostic:
      into mytest.
 
    Suggested artifacts:
-   - `analysis/not_stone_audit/not_stone_neighbors.csv`
-   - `analysis/not_stone_audit/not_stone_summary.csv`
+   - `evaluation/not_stone_audit/not_stone_neighbors.csv`
+   - `evaluation/not_stone_audit/not_stone_summary.csv`
    - revised candidate lists such as `not-stone.keep.txt`,
      `not-stone.remove.txt`, and `not-stone.review.txt`
 

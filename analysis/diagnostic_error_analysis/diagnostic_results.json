@@ -1,0 +1,402 @@
+{
+  "target_run": "soup_reduced_notstone",
+  "datasets": {
+    "myval_masked": {
+      "distribution": {
+        "n_total": 332,
+        "n_pos": 146,
+        "n_neg": 186,
+        "neg_pos_ratio": 1.274,
+        "prob_pos_mean": 0.589279,
+        "prob_pos_median": 0.753,
+        "prob_pos_std": 0.359659,
+        "pos_prob_mean": 0.77976,
+        "neg_prob_mean": 0.439763,
+        "pos_prob_median": 0.914,
+        "neg_prob_median": 0.30335
+      },
+      "at_threshold_0.5": {
+        "threshold": 0.5,
+        "tp": 124,
+        "fp": 73,
+        "fn": 22,
+        "tn": 113,
+        "precision": 0.6294,
+        "recall": 0.8493,
+        "f1": 0.723,
+        "n_pos_pred": 197,
+        "n_neg_pred": 135
+      },
+      "best_threshold": {
+        "threshold": 0.5366,
+        "f1": 0.7251,
+        "tp": 124,
+        "fp": 72,
+        "fn": 22,
+        "tn": 114,
+        "precision": 0.6327,
+        "recall": 0.8493,
+        "n_pos_pred": 196,
+        "n_neg_pred": 136
+      },
+      "hard_cases_near_0.5": {
+        "count": 37,
+        "margin": 0.15,
+        "examples": [
+          {
+            "image_id": "img_202dc43bdf09.jpg",
+            "prob_pos": 0.496,
+            "label": 0
+          },
+          {
+            "image_id": "h-r11.jpg",
+            "prob_pos": 0.4832,
+            "label": 0
+          },
+          {
+            "image_id": "h-r14.jpg",
+            "prob_pos": 0.52,
+            "label": 0
+          },
+          {
+            "image_id": "img_ac1089d1be22.jpg",
+            "prob_pos": 0.4746,
+            "label": 0
+          },
+          {
+            "image_id": "img_8e97bd4f8c16.jpg",
+            "prob_pos": 0.4697,
+            "label": 0
+          },
+          {
+            "image_id": "img_62cf0a98f703.jpg",
+            "prob_pos": 0.4666,
+            "label": 1
+          },
+          {
+            "image_id": "img_78c214f24f70.jpg",
+            "prob_pos": 0.5366,
+            "label": 1
+          },
+          {
+            "image_id": "img_f95a6271abec.jpg",
+            "prob_pos": 0.4531,
+            "label": 0
+          },
+          {
+            "image_id": "img_0c53b1f97f06.jpg",
+            "prob_pos": 0.5493,
+            "label": 1
+          },
+          {
+            "image_id": "img_4fb54821577e.jpg",
+            "prob_pos": 0.4495,
+            "label": 0
+          },
+          {
+            "image_id": "img_b493e4fdcc42.jpg",
+            "prob_pos": 0.551,
+            "label": 1
+          },
+          {
+            "image_id": "img_5ed4868aa850.jpg",
+            "prob_pos": 0.4475,
+            "label": 0
+          },
+          {
+            "image_id": "img_7a03b8b3de97.jpg",
+            "prob_pos": 0.559,
+            "label": 1
+          },
+          {
+            "image_id": "img_b1216d2fd82c.jpg",
+            "prob_pos": 0.436,
+            "label": 0
+          },
+          {
+            "image_id": "img_bfbe38930832.jpg",
+            "prob_pos": 0.4355,
+            "label": 1
+          },
+          {
+            "image_id": "img_0de3586a0091.jpg",
+            "prob_pos": 0.565,
+            "label": 0
+          },
+          {
+            "image_id": "img_a6883f3307f7.jpg",
+            "prob_pos": 0.576,
+            "label": 0
+          },
+          {
+            "image_id": "img_0d80b760afb6.jpg",
+            "prob_pos": 0.4214,
+            "label": 0
+          },
+          {
+            "image_id": "img_d7e8b09e59f6.jpg",
+            "prob_pos": 0.5923,
+            "label": 1
+          },
+          {
+            "image_id": "img_c0d082f79276.jpg",
+            "prob_pos": 0.4,
+            "label": 0
+          },
+          {
+            "image_id": "img_1d26e81c45ec.jpg",
+            "prob_pos": 0.6006,
+            "label": 0
+          },
+          {
+            "image_id": "img_0a2d554dfd6c.jpg",
+            "prob_pos": 0.6094,
+            "label": 1
+          },
+          {
+            "image_id": "img_46cc0c454ef3.jpg",
+            "prob_pos": 0.3877,
+            "label": 0
+          },
+          {
+            "image_id": "img_7dcbb45674ac.jpg",
+            "prob_pos": 0.615,
+            "label": 1
+          },
+          {
+            "image_id": "img_504af81f78a4.png",
+            "prob_pos": 0.38,
+            "label": 1
+          },
+          {
+            "image_id": "img_b7dfd1a63b59.jpg",
+            "prob_pos": 0.3777,
+            "label": 0
+          },
+          {
+            "image_id": "r25.jpg",
+            "prob_pos": 0.3772,
+            "label": 0
+          },
+          {
+            "image_id": "h-r25.jpg",
+            "prob_pos": 0.3772,
+            "label": 0
+          },
+          {
+            "image_id": "img_d7d92ab05390.jpg",
+            "prob_pos": 0.629,
+            "label": 0
+          },
+          {
+            "image_id": "img_1856eeed6e8d.jpg",
+            "prob_pos": 0.632,
+            "label": 1
+          }
+        ]
+      },
+      "errors": {
+        "false_positives": {
+          "count": 73,
+          "ids": [
+            "r9.jpg",
+            "r19.jpg",
+            "r23.jpg",
+            "r24.jpg",
+            "r26.jpg",
+            "img_1d26e81c45ec.jpg",
+            "img_972eeed38df4.jpg",
+            "img_79860a7ec7b8.png",
+            "img_a6883f3307f7.jpg",
+            "img_3cfffca11fb0.jpg",
+            "img_879be686ed6b.jpg",
+            "img_d45ebf195c4e.jpg",
+            "img_17d7e885bdea.png",
+            "img_5cae17bfc1b6.jpg",
+            "img_0de3586a0091.jpg",
+            "img_f001b57acc0e.jpg",
+            "img_0a928bd98bec.jpg",
+            "img_387c6648b726.jpg",
+            "img_bc77811e3b43.jpg",
+            "img_333496f15f6c.jpg",
+            "img_fbdd399ca99b.jpg",
+            "img_b1c0ef9e2107.jpg",
+            "img_69035e524380.jpg",
+            "img_8b389411f514.jpg",
+            "img_d98f04a4f6fd.jpg",
+            "img_9b34a41a6dd2.jpg",
+            "img_5f63d1ce3fe8.jpg",
+            "img_76d0b9c42af4.jpg",
+            "img_ace60e7a5459.jpg",
+            "img_e7e7a1fd9eaa.jpg",
+            "img_0d21b451c31c.jpg",
+            "img_65c72f90266e.jpg",
+            "img_504966c5b9f6.jpg",
+            "img_df2d250a54d4.jpg",
+            "img_fde66b4a3083.jpg",
+            "img_a9f285aca1f4.jpg",
+            "img_76cde5b2452b.jpg",
+            "img_b7501aa41a1c.jpg",
+            "img_4313344e9bf8.jpg",
+            "img_2a5a492a984c.jpg",
+            "img_06a0b9cf01f0.jpg",
+            "img_7065809558f6.jpg",
+            "img_4a4b9e723d70.jpg",
+            "img_433bc7e52199.jpg",
+            "img_ff48806f69bd.jpg",
+            "img_7aaffe316d71.jpg",
+            "img_a43c965db43f.jpg",
+            "img_d7d92ab05390.jpg",
+            "img_2a670f084ce2.jpg",
+            "img_542408493187.jpg"
+          ]
+        },
+        "false_negatives": {
+          "count": 22,
+          "ids": [
+            "m4.jpg",
+            "img_bfbe38930832.jpg",
+            "img_ddce7b5b0e90.jpg",
+            "img_8c456a5989eb.jpg",
+            "img_f422f01b7cb9.jpg",
+            "img_0ff401809c6c.jpg",
+            "img_fcd7781dfeea.jpg",
+            "img_487ed9d7251a.jpg",
+            "img_6858b2b332aa.jpg",
+            "img_c23c037059b0.jpg",
+            "img_c60f54594650.jpg",
+            "img_9c7682e76aeb.jpg",
+            "img_504af81f78a4.png",
+            "img_27f58d8258af.jpg",
+            "img_41968d785f91.jpg",
+            "img_70407ec96783.jpg",
+            "img_d000e4b65308.png",
+            "img_c29eb110a686.jpg",
+            "img_462e23e2e18a.jpg",
+            "img_62cf0a98f703.jpg",
+            "img_06745015e357.jpg",
+            "img_db73fad85418.jpg"
+          ]
+        }
+      }
+    },
+    "testlike_cluster_dino_v4": {
+      "distribution": {
+        "n_total": 160,
+        "n_pos": 79,
+        "n_neg": 81,
+        "neg_pos_ratio": 1.0253,
+        "prob_pos_mean": 0.499859,
+        "prob_pos_median": 0.492315,
+        "prob_pos_std": 0.448692,
+        "pos_prob_mean": 0.949114,
+        "neg_prob_mean": 0.061698,
+        "pos_prob_median": 0.9536,
+        "neg_prob_median": 0.04932
+      },
+      "at_threshold_0.5": {
+        "threshold": 0.5,
+        "tp": 79,
+        "fp": 1,
+        "fn": 0,
+        "tn": 80,
+        "precision": 0.9875,
+        "recall": 1.0,
+        "f1": 0.9937,
+        "n_pos_pred": 80,
+        "n_neg_pred": 80
+      },
+      "best_threshold": {
+        "threshold": 0.5,
+        "f1": 0.9937,
+        "tp": 79,
+        "fp": 1,
+        "fn": 0,
+        "tn": 80,
+        "precision": 0.9875,
+        "recall": 1.0,
+        "n_pos_pred": 80,
+        "n_neg_pred": 80
+      },
+      "hard_cases_near_0.5": {
+        "count": 0,
+        "margin": 0.15,
+        "examples": []
+      },
+      "errors": {
+        "false_positives": {
+          "count": 1,
+          "ids": [
+            "005085.jpg"
+          ]
+        },
+        "false_negatives": {
+          "count": 0,
+          "ids": []
+        }
+      }
+    },
+    "testlike_top_dino_v4": {
+      "distribution": {
+        "n_total": 160,
+        "n_pos": 80,
+        "n_neg": 80,
+        "neg_pos_ratio": 1.0,
+        "prob_pos_mean": 0.499977,
+        "prob_pos_median": 0.490615,
+        "prob_pos_std": 0.450446,
+        "pos_prob_mean": 0.950182,
+        "neg_prob_mean": 0.049771,
+        "pos_prob_median": 0.9528,
+        "neg_prob_median": 0.049375
+      },
+      "at_threshold_0.5": {
+        "threshold": 0.5,
+        "tp": 80,
+        "fp": 0,
+        "fn": 0,
+        "tn": 80,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "n_pos_pred": 80,
+        "n_neg_pred": 80
+      },
+      "best_threshold": {
+        "threshold": 0.5,
+        "f1": 1.0,
+        "tp": 80,
+        "fp": 0,
+        "fn": 0,
+        "tn": 80,
+        "precision": 1.0,
+        "recall": 1.0,
+        "n_pos_pred": 80,
+        "n_neg_pred": 80
+      },
+      "hard_cases_near_0.5": {
+        "count": 0,
+        "margin": 0.15,
+        "examples": []
+      },
+      "errors": {
+        "false_positives": {
+          "count": 0,
+          "ids": []
+        },
+        "false_negatives": {
+          "count": 0,
+          "ids": []
+        }
+      }
+    }
+  },
+  "summary": {},
+  "cross_reference_myval_not_stone": {
+    "not_stone_in_myval_errors": {
+      "false_positives": [],
+      "false_negatives": [],
+      "details": {}
+    }
+  }
+}
